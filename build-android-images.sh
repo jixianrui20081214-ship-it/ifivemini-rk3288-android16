@@ -1,23 +1,26 @@
 #!/bin/bash
-# Build the Android 16 super.img plus the remaining release inputs from a LineageOS 23.2
-# arm32_binder64 GSI system image (raw, sparse or .xz), the vendor/odm images of a reference
-# super.img, and vendor-changes/. The result in <output_dir> is ready for
-# release-build/make-release.sh.
+# Build the inputs of release-build/make-release.sh:
+#   super.img      LineageOS 23.2 GSI system + the Tinker Board vendor with vendor-changes/ + odm
+#   ramdisk.img, metadata.img, userdata-head-zero.img, rkdeveloptool   taken from a release zip
 #
-# Usage: ./build-android-images.sh <lineage-gsi-system.img[.xz]> [output_dir]   (default: ./inputs)
+# Usage: ./build-android-images.sh <gsi> <release.zip> [output_dir]   (default: ./inputs)
+#   <gsi>          the GSI system image: .img (raw or sparse), .img.xz or .tar.xz
+#   <release.zip>  a release package from GitHub; its super.img provides vendor and odm
 
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-GSI_SRC=${1:?usage: $0 <lineage-gsi-system.img[.xz]> [output_dir]}
-OUT_DIR=${2:-$HERE/inputs}
+USAGE="usage: $0 <gsi.img|gsi.img.xz|gsi.tar.xz> <release.zip> [output_dir]"
+GSI_SRC=${1:?$USAGE}
+ZIP=${2:?$USAGE}
+OUT_DIR=${3:-$HERE/inputs}
 WORK_DIR="$HERE/out/super-work"
 
 mkdir -p "$OUT_DIR" "$WORK_DIR"
 
 echo "=== 1. Checking required tools ==="
 MISSING=()
-for tool in unxz unzip simg2img lpmake lpunpack debugfs e2fsck dd; do
+for tool in tar unxz unzip simg2img lpmake lpunpack debugfs e2fsck dd; do
     command -v "$tool" >/dev/null 2>&1 || MISSING+=("$tool")
 done
 if [ ${#MISSING[@]} -gt 0 ]; then
@@ -34,68 +37,34 @@ GSI_IMG="$WORK_DIR/system.img"
 [ -f "$GSI_SRC" ] || { echo "STOP: no such file: $GSI_SRC"; exit 1; }
 RAW="$WORK_DIR/system.src.img"
 case "$GSI_SRC" in
-    *.xz) unxz -c "$GSI_SRC" > "$RAW" ;;
-    *)    cp "$GSI_SRC" "$RAW" ;;
+    *.tar.xz) tar -xJOf "$GSI_SRC" --wildcards '*.img' > "$RAW" ;;
+    *.xz)     unxz -c "$GSI_SRC" > "$RAW" ;;
+    *)        cp "$GSI_SRC" "$RAW" ;;
 esac
 # simg2img fails on a raw image; then the copy already is the raw image.
 simg2img "$RAW" "$GSI_IMG" 2>/dev/null || mv "$RAW" "$GSI_IMG"
 rm -f "$RAW"
 
-echo "=== 3. Vendor and ODM images (from a reference super.img) ==="
-VENDOR_IMG="$WORK_DIR/vendor.img"
-ODM_IMG="$WORK_DIR/odm.img"
-if [ ! -f "$VENDOR_IMG" ] || [ ! -f "$ODM_IMG" ]; then
-    BASE=""
-    # Copy the reference first so step 5 never overwrites the only source.
-    if [ -f "$OUT_DIR/super.img" ] && [ ! -f "$WORK_DIR/base-super.img" ]; then
-        cp "$OUT_DIR/super.img" "$WORK_DIR/base-super.img"
-    fi
-    for c in "$WORK_DIR/base-super.img" "$HERE/out/release/ifive-mini4s-android16-gsi-rescue/images/super.img"; do
-        [ -f "$c" ] && { BASE="$c"; break; }
-    done
-    if [ -z "$BASE" ]; then
-        ZIP=$(ls "$HERE"/release/*.zip 2>/dev/null | head -n 1 || true)
-        if [ -n "$ZIP" ]; then
-            echo "extracting images/super.img from $ZIP ..."
-            unzip -p "$ZIP" "images/super.img" > "$WORK_DIR/base-super.img"
-            BASE="$WORK_DIR/base-super.img"
-        fi
-    fi
-    [ -n "$BASE" ] || { echo "STOP: no reference super.img found (checked inputs/, out/release/, release/*.zip)"; exit 1; }
-    echo "unpacking vendor/odm from $BASE"
-    lpunpack "$BASE" "$WORK_DIR/unpacked"
-    cp "$WORK_DIR/unpacked/vendor.img" "$VENDOR_IMG"
-    cp "$WORK_DIR/unpacked/odm.img" "$ODM_IMG"
-else
-    echo "using existing $VENDOR_IMG / $ODM_IMG"
-fi
+echo "=== 3. From $(basename "$ZIP"): vendor, odm and the other images ==="
+[ -f "$ZIP" ] || { echo "STOP: no such file: $ZIP"; exit 1; }
+PKG="$WORK_DIR/package"
+rm -rf "$PKG"; mkdir -p "$PKG"
+unzip -q -j -o "$ZIP" '*/images/super.img' '*/images/ramdisk.img' '*/images/metadata.img' \
+    '*/images/userdata-head-zero.img' '*/tools/rkdeveloptool' -d "$PKG"
+lpunpack -p vendor -p odm "$PKG/super.img" "$WORK_DIR"
+cp "$PKG/ramdisk.img" "$PKG/metadata.img" "$PKG/userdata-head-zero.img" "$PKG/rkdeveloptool" "$OUT_DIR/"
+chmod +x "$OUT_DIR/rkdeveloptool"
+rm "$PKG/super.img"
 
-echo "=== 4. Patch vendor (HWC, power HAL, chgpolicy, init.rk3288.rc, VINTF manifest) ==="
-VENDOR_PATCHED="$WORK_DIR/vendor-patched.img"
-"$HERE/scripts/patch-vendor.sh" "$VENDOR_IMG" "$VENDOR_PATCHED"
+echo "=== 4. Patch vendor (HWC, power HAL, chgpolicy, init.rk3288.rc, VINTF manifest, build.prop) ==="
+"$HERE/scripts/patch-vendor.sh" "$WORK_DIR/vendor.img" "$WORK_DIR/vendor-patched.img"
 
 echo "=== 5. Device identity (brand/model/fingerprint) ==="
-ID_DIR="$WORK_DIR/identity"
-"$HERE/scripts/patch-identity.sh" "$GSI_IMG" "$VENDOR_PATCHED" "$ID_DIR"
+"$HERE/scripts/patch-identity.sh" "$GSI_IMG" "$WORK_DIR/vendor-patched.img" "$WORK_DIR/identity"
 
 echo "=== 6. Pack super.img ==="
-"$HERE/scripts/build-super.sh" "$ID_DIR/system.img" "$ID_DIR/vendor.img" "$ODM_IMG" "$OUT_DIR/super.img"
-
-echo "=== 7. Ancillary inputs (metadata, userdata head, ramdisk, rkdeveloptool) ==="
-REF_DIR="$HERE/out/release/ifive-mini4s-android16-gsi-rescue/images"
-[ -f "$OUT_DIR/metadata.img" ] || { [ -f "$REF_DIR/metadata.img" ] && cp "$REF_DIR/metadata.img" "$OUT_DIR/" || dd if=/dev/zero of="$OUT_DIR/metadata.img" bs=1M count=16 status=none; }
-[ -f "$OUT_DIR/userdata-head-zero.img" ] || { [ -f "$REF_DIR/userdata-head-zero.img" ] && cp "$REF_DIR/userdata-head-zero.img" "$OUT_DIR/" || dd if=/dev/zero of="$OUT_DIR/userdata-head-zero.img" bs=1M count=1 status=none; }
-[ -f "$OUT_DIR/ramdisk.img" ] || { [ -f "$REF_DIR/ramdisk.img" ] && cp "$REF_DIR/ramdisk.img" "$OUT_DIR/"; }
-# make-release.sh copies this binary into tools/, so the zip ships the rkdeveloptool that
-# was used on this tablet instead of whatever the host has in PATH.
-if [ ! -f "$OUT_DIR/rkdeveloptool" ]; then
-    for c in "$HERE/out/release/ifive-mini4s-android16-gsi-rescue/tools/rkdeveloptool" "$(command -v rkdeveloptool || true)"; do
-        if [ -n "$c" ] && [ -f "$c" ]; then cp "$c" "$OUT_DIR/rkdeveloptool"; chmod +x "$OUT_DIR/rkdeveloptool"; echo "bundling rkdeveloptool from $c"; break; fi
-    done
-    [ -f "$OUT_DIR/rkdeveloptool" ] || echo "NOTE: no rkdeveloptool found - make-release.sh stops unless one is in PATH"
-fi
+"$HERE/scripts/build-super.sh" "$WORK_DIR/identity/system.img" "$WORK_DIR/identity/vendor.img" "$WORK_DIR/odm.img" "$OUT_DIR/super.img"
 
 echo
-echo "Done. Inputs ready in $OUT_DIR:"
 ls -lh "$OUT_DIR"
-echo "Next: ./release-build/make-release.sh $OUT_DIR"
+echo "Next: ./release-build/make-release.sh $OUT_DIR <date>"
