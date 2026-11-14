@@ -1,6 +1,10 @@
 #!/bin/bash
 # Write this tablet's own identity into the GSI system image and the vendor image:
 # brand, manufacturer, model, name, device and a ro.build.fingerprint built from them.
+# Also restore AOSP's userdebug rule "permissive su" (system/sepolicy private/su.te) in the
+# system image's plat_sepolicy.cil: the LineageOS GSI keeps the su type but drops that rule,
+# so under enforcing `adb root` starts adbd as u:r:su, adbd cannot listen on its auth socket
+# and exits, and USB and wireless adb disappear until reboot.
 #
 #   ./patch-identity.sh <system.img> <vendor.img> <out-dir>
 #
@@ -91,12 +95,17 @@ print("   build.prop: %d key(s) replaced, %d added" % (len(replaced), len(added)
 PY
 }
 
-patch_one() { # <in.img> <prop path in image> <partition prefix> <out name>
-    local img=$1 prop=$2 pfx=$3 out=$4 work dir st mode uid gid label
+add_permissive_su() { # <plat_sepolicy.cil> <unused>
+    if grep -qx '(typepermissive su)' "$1"; then echo "   plat_sepolicy.cil: permissive su already present"; return; fi
+    grep -qx '(type su)' "$1" || { echo "STOP: no (type su) in plat_sepolicy.cil"; exit 1; }
+    echo '(typepermissive su)' >> "$1"
+    echo "   plat_sepolicy.cil: added (typepermissive su)"
+}
+
+patch_one() { # <image> <file path in image> <editor function> <editor arg>
+    local dir=$1 prop=$2 edit=$3 pfx=$4 work st mode uid gid label
     work=$(mktemp -d "${TMPDIR:-/tmp}/ifive-identity.XXXXXX")
     WORK_DIRS+=("$work")
-    dir="$OUTD/$out"
-    cp "$img" "$dir"
 
     debugfs -R "cat $prop" "$dir" > "$work/props" 2>/dev/null \
         || { echo "STOP: cannot read $prop from $img"; exit 1; }
@@ -111,7 +120,7 @@ patch_one() { # <in.img> <prop path in image> <partition prefix> <out name>
     # (S_IFREG is 8#0100000, so the result must be 6 octal digits: 0100644, not 010644)
     mode=$(printf '0%06o' $((8#0100000 + 8#$mode)))
 
-    rewrite_props "$work/props" "$pfx"
+    "$edit" "$work/props" "$pfx"
 
     debugfs -w "$dir" <<EOF >/dev/null
 rm $prop
@@ -127,15 +136,14 @@ EOF
     [ "$got" = "$want" ] || { echo "STOP: $prop read back as $got B, written $want B"; exit 1; }
     e2fsck -fn "$dir" >/dev/null || { echo "STOP: e2fsck reports damage in $dir"; exit 1; }
 
-    echo "   read back from $out: $got B, mode $mode, owner $uid:$gid"
-    debugfs -R "cat $prop" "$dir" 2>/dev/null \
-        | grep -E "^ro\.(product\.|build\.fingerprint|system\.build\.fingerprint|build\.flavor|build\.description)" \
-        | sed 's/^/      /'
+    echo "   read back $prop: $got B, mode $mode, owner $uid:$gid"
 }
 
 echo "== identity: brand=$BRAND manufacturer=$MANU model=\"$MODEL\" name=$NAME device=$DEVICE"
 echo "-- $SYS"
-patch_one "$SYS" /system/build.prop system system.img
+cp "$SYS" "$OUTD/system.img"; cp "$VEN" "$OUTD/vendor.img"
+patch_one "$OUTD/system.img" /system/build.prop rewrite_props system
+patch_one "$OUTD/system.img" /system/etc/selinux/plat_sepolicy.cil add_permissive_su -
 echo "-- $VEN"
-patch_one "$VEN" /build.prop vendor vendor.img
+patch_one "$OUTD/vendor.img" /build.prop rewrite_props vendor
 echo "OK: $OUTD/system.img  $OUTD/vendor.img"

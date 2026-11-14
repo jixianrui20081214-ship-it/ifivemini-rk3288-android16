@@ -11,14 +11,16 @@ A=$(cd "$(dirname "$0")/../.." && pwd)
 export TMPDIR=${TMPDIR:-$A/out/tmp}; mkdir -p "$TMPDIR"
 R=${1:?usage: $0 <outdir>}; mkdir -p "$R"
 T=$A/hwc/test
-timeout 15 adb root >/dev/null 2>&1
-timeout 60 adb shell 'echo "== state"; echo build=$(getprop ro.build.fingerprint); echo lineage=$(getprop ro.lineage.version)
-  echo kernel=$(uname -v); echo hal=$(md5sum /vendor/lib/hw/hwcomposer.rk30board.so | cut -c1-8)
-  echo magisk=$(magisk -v 2>/dev/null); echo ddr=$(cat /sys/class/devfreq/ff610000.dmc-cros/cur_freq 2>/dev/null)
-  echo fbbufs=$(getprop ro.surface_flinger.max_frame_buffer_acquired_buffers)
-  echo broadcast=$(grep -m1 -A1 "^Broadcast device" /proc/timer_list | tail -1)
-  echo tombstones=$(ls /data/tombstones | wc -l); logcat -c; dmesg -c >/dev/null' | tr -d '\r' | tee "$R/state.txt"
-timeout 10 adb unroot >/dev/null 2>&1
+# Root commands go through Magisk su: `adb root` makes adbd run as u:r:su, which this
+# GSI's policy confines, so under enforcing adbd exits and USB adb is gone until reboot.
+timeout 60 adb shell su -c sh <<'EOF' | tr -d '\r' | tee "$R/state.txt"
+echo "== state"; echo build=$(getprop ro.build.fingerprint); echo lineage=$(getprop ro.lineage.version)
+echo kernel=$(uname -v); echo hal=$(md5sum /vendor/lib/hw/hwcomposer.rk30board.so | cut -c1-8)
+echo magisk=$(magisk -v 2>/dev/null); echo ddr=$(cat /sys/class/devfreq/ff610000.dmc-cros/cur_freq 2>/dev/null)
+echo fbbufs=$(getprop ro.surface_flinger.max_frame_buffer_acquired_buffers)
+echo broadcast=$(grep -m1 -A1 "^Broadcast device" /proc/timer_list | tail -1)
+echo selinux=$(getenforce); echo tombstones=$(ls /data/tombstones | wc -l); logcat -c; dmesg -c >/dev/null
+EOF
 timeout 150 adb shell "settings put system accelerometer_rotation 0; settings put system user_rotation 0
   input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard; input keyevent KEYCODE_HOME; ping -c 2 127.0.0.1 >/dev/null
   dumpsys gfxinfo com.android.launcher3 reset >/dev/null; dumpsys SurfaceFlinger --timestats -disable -clear >/dev/null; dumpsys SurfaceFlinger --timestats -enable >/dev/null
@@ -27,7 +29,7 @@ timeout 150 adb shell "settings put system accelerometer_rotation 0; settings pu
   dumpsys SurfaceFlinger --timestats -disable >/dev/null" | tr -d '\r' | tee "$R/launch.txt"
 "$T/real3.sh" "$R/real3" 8 | tee "$R/real3.txt"
 "$T/recset.sh" recents-from-settings 3 | tee "$R/recset.txt"
-timeout 15 adb root >/dev/null 2>&1
-timeout 60 adb shell 'echo "== errors"; echo iommu=$(dmesg | grep -acE "Page fault|stall request") hwc=$(logcat -d | grep -acE "Failed to commit pset|Composite failed") tombstones=$(ls /data/tombstones | wc -l)
-  settings put system accelerometer_rotation 1' | tr -d '\r' | tee "$R/errors.txt"
-timeout 10 adb unroot >/dev/null 2>&1
+timeout 60 adb shell su -c sh <<'EOF' | tr -d '\r' | tee "$R/errors.txt"
+echo "== errors"; echo iommu=$(dmesg | grep -acE "Page fault|stall request") hwc=$(logcat -d | grep -acE "Failed to commit pset|Composite failed") tombstones=$(ls /data/tombstones | wc -l)
+settings put system accelerometer_rotation 1
+EOF
