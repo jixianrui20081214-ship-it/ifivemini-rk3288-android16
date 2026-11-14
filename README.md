@@ -15,9 +15,9 @@ You need a Linux x86_64 PC. `rkdeveloptool` is in the package.
 
 1. Download `ifive-mini4s-android16-gsi-<date>-lineage232.zip` from [Releases](https://github.com/leohearts/ifivemini-rk3288-android16/releases), unzip, `sha256sum -c SHA256SUMS`.
 2. Power the tablet off. Hold Volume Down and plug in USB.
-3. Still on the stock Android 6? `./restore.sh`.
+3. Still on the stock Android 6? `sudo bash restore.sh`.
    The stock partition table is too small for Android 16, so this one writes a new table first.
-4. Already on a build from here? `./flash.sh --yes`.
+4. Already on a build from here? `sudo bash flash.sh --yes`.
    Add `--keep-userdata` to keep your apps and data.
 
 The first boot takes a few minutes and prints kernel text on the screen. That's normal.
@@ -51,28 +51,38 @@ These are the parts that make it boot on this tablet, and then drop fewer frames
 
 ## Building
 
-Linux x86_64. On Fedora:
+Linux x86_64. Clone with [git-lfs](https://git-lfs.com) installed: the stock bootloader files in `stock-backup/` are LFS objects.
+
+Fedora:
 
 ```sh
-sudo dnf install -y python3 zip unzip dtc bc bison flex lz4 openssl-devel \
+sudo dnf install -y git-lfs python3 zip unzip dtc bc bison flex lz4 openssl-devel \
     gcc-arm-linux-gnu binutils-arm-linux-gnu android-tools e2fsprogs xz
 ```
 
-On Debian/Ubuntu, `apt install python3 zip unzip device-tree-compiler bc bison flex lz4 libssl-dev gcc-arm-linux-gnueabi android-sdk-libsparse-utils e2fsprogs xz-utils`, set `CROSS_COMPILE=arm-linux-gnueabi-`, and build `lpmake`/`lpunpack` from AOSP `system/extras/partition_tools`.
+Debian/Ubuntu: `apt install git-lfs python3 zip unzip device-tree-compiler bc bison flex lz4 libssl-dev gcc-arm-linux-gnueabi android-sdk-libsparse-utils e2fsprogs xz-utils`, set `CROSS_COMPILE=arm-linux-gnueabi-`, and build `lpmake`/`lpunpack` from AOSP `system/extras/partition_tools`.
 
-The HWC also needs Android NDK r25 (`NDK=`, default `~/Android/Sdk/ndk/25.0.8775105`) and the VNDK-30 headers from the `vndk30.tar.gz` release asset, unpacked into `hwc/hdr/vndk30`.
+The HWC needs Android NDK r25 (set `NDK=`; default `~/Android/Sdk/ndk/25.0.8775105`) and the VNDK-30 headers:
+
+```sh
+curl -LO https://github.com/leohearts/ifivemini-rk3288-android16/releases/download/init/vndk30.tar.gz
+tar xzf vndk30.tar.gz -C hwc/hdr
+```
+
+Then:
 
 ```sh
 ./build-kernel.sh                         # out/kernel-gsi-release/kernel.img
 ./release-build/build-resource.sh         # release-build/resource-release-gsi.img
-(cd hwc && ./build.sh)                    # vendor-changes/lib/hw/hwcomposer.rk30board.so
+(cd hwc && ./build.sh)                    # hwc/out/hwcomposer.rk30board.so
+cp hwc/out/hwcomposer.rk30board.so vendor-changes/lib/hw/
 
-./build-android-images.sh <lineage-23.2-arm32_binder64-system.img[.xz]> inputs
+./build-android-images.sh <lineage-gsi-system.img|.img.xz|.tar.xz> <release.zip>
 ./release-build/make-release.sh inputs <date>
 scripts/make-magisk-boot.sh inputs/ramdisk.img Magisk-v31.0.apk boot-magisk-v31.img
 ```
 
-`build-android-images.sh` takes the vendor and odm images from `inputs/super.img` or from the first zip in `release/`, so put a release zip there first.
+`build-android-images.sh` takes vendor, odm, the boot ramdisk and `rkdeveloptool` from a release zip of this project, puts in the GSI system and `vendor-changes/`, and writes everything to `inputs/`. The zip ends up in `release/`.
 
 ## Layout
 

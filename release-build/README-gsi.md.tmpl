@@ -1,117 +1,98 @@
-# iFive mini 4S — Android 16 GSI release {{DATE}}
+# iFive mini 4S — Android 16, {{DATE}}
 
-- System: {{SYSTEM}}, in `images/super.img` together with the ASUS Tinker Board Android 11 vendor partition carrying the repository's `vendor-changes/`.
-- Kernel: Linux 4.19, release config.
-- Boot partition (`images/ramdisk.img`): {{BOOT}}.
-- Partition map: system 3072 MiB @ 296 MiB, metadata 16 MiB @ 3368 MiB, userdata @ 3448 MiB.
+- System: {{SYSTEM}}, with the ASUS Tinker Board Android 11 vendor partition and this project's changes.
+- Kernel: Linux 4.19.
+- Boot partition: {{BOOT}}.
 
-## Contents
-- `images/`: `resource.img` (device tree + logos), `kernel.img`, `ramdisk.img`, `super.img`, `metadata.img`, `userdata-head-zero.img`
-- `loader/RK3288UbootLoader_V2.30.10.bin`; `loader/rk3288_loader_v1.12.263.bin` (the image `rkdeveloptool db` loads in Maskrom mode)
-- `devices/<board>/`: per-board rescue data (parameter structures and the first 4/8 MiB of the eMMC)
-- `flash.sh`, `restore.sh`, `write-loader-head.sh`, `lib-wl.inc`, `manifest.json` (write map), `tools/rkdeveloptool`
-- `SHA256SUMS`, `BUILD-INFO.txt`
+## What you need
 
-All write addresses come from `manifest.json`, which the build derives from the partition table in `images/resource.img` and the parameter structure of each board.
+A Linux x86_64 PC and a USB cable. Everything else is in this folder: `rkdeveloptool` is in `tools/`.
 
-## Flashing
-On a tablet with the stock Android 6 firmware use `restore.sh` (next section): `flash.sh` writes the images at the GSI partition table's addresses, and the stock table gives `system` 1536 MiB and puts every later partition 0x300000 sectors lower. `flash.sh` is for tablets already running a package from this repository.
-
-Needs Linux x86_64 with libusb-1.0. `tools/rkdeveloptool` is used; set `RKDEVELOPTOOL` to use another build.
-
-1. Put the tablet in Rockchip download mode (USB `2207:320a`): power it off, hold Volume Down and plug in the USB cable. `./tools/rkdeveloptool ld` prints `Loader` or `Maskrom`.
-2. Run:
-   ```sh
-   ./flash.sh --dry-run                 # print every command
-   ./flash.sh --yes                     # replace everything, wipe /data
-   ./flash.sh --yes --keep-userdata     # replace everything except metadata and the start of userdata
-   ```
-3. Each image is checked against `SHA256SUMS`, written in pieces, read back and compared. An interrupted flash continues where it stopped (`--fresh` starts over). The script clears the download-mode command in `misc` and resets the tablet. The first boot takes several minutes.
-
-`--keep-userdata` keeps `/data` readable because `/data` on this tablet is plain ext4 on `mmcblk0p13` (`ro.crypto.state=unsupported`).
-
-## Restoring a wiped tablet
-`restore.sh` writes the GSI partition table (parameter structures) and then all images. Use it on a tablet with the stock firmware and on a tablet whose parameter structures are erased but whose bootloader is intact (it still enumerates in Loader mode).
+Check the download first:
 
 ```sh
-./restore.sh --plan              # print the write map
-./restore.sh                     # detect the board, write parameters and all images
-./restore.sh --board ifive-mini4s
-./restore.sh --parameters-only   # write only the two parameter structures
-./restore.sh --maskrom           # tablet in Maskrom mode: load the loader into RAM first
+sha256sum -c SHA256SUMS
 ```
 
-The board is detected by comparing the parameter structure at tool LBA 0x2000 with `devices/*/parameter-p1.img`; on a tablet with no parameter structure pass `--board`. The script asks for the word `restore` before writing (`--yes` skips that), reads every write back and stops on a mismatch. Reset the tablet with `tools/rkdeveloptool rd` when it prints `RESTORE COMPLETE`.
+## Download mode
 
-Write map for `ifive-mini4s`:
+Power the tablet off. Hold Volume Down and plug in USB.
 
-|what|tool LBA|raw sector|MiB|
-|---|---|---|---|
-|`devices/ifive-mini4s/parameter-loader.img`|0x0000|0x02000|4|
-|`devices/ifive-mini4s/parameter-p1.img`|0x2000|0x04000|8|
-|`images/resource.img`|0x6000|0x08000|16|
-|`images/kernel.img`|0xE000|0x10000|32|
-|`images/ramdisk.img`|0x16000|0x18000|48|
-|`images/super.img`|0x92000|0x94000|296|
-|`images/metadata.img`|0x692000|0x694000|3368|
-|`images/userdata-head-zero.img`|0x6BA000|0x6BC000|3448|
+```sh
+sudo tools/rkdeveloptool ld      # prints Loader or Maskrom
+```
 
-`rkdeveloptool` counts from eMMC sector 0x2000: `tool LBA = raw sector - 0x2000`. The loader area (raw sectors 0x0000..0x1FFF: idblock at 0x40, `u-boot.itb` at 0x44) therefore has no tool LBA.
+`sudo` is there because a normal user can't open the USB device without a udev rule for `2207:320a`. The same goes for every command below.
 
-The partition table in the device tree gives `system` 3072 MiB, the stock parameter structure 1536 MiB; every partition behind `system` moves out by the difference (0x300000 sectors). `restore.sh` computes that difference from the two tables, checks every other partition against it, and stops before writing if any partition disagrees.
+## Coming from stock Android 6
 
-## A tablet with a blank eMMC
-With no bootloader on the eMMC the tablet enumerates in Maskrom mode. In this order:
+```sh
+sudo bash restore.sh
+```
 
-1. `./restore.sh --board ifive-mini4s --maskrom --parameters-only`: loads `loader/rk3288_loader_v1.12.263.bin` into RAM (Loader mode) and writes the parameter structures. RKDevTool/AFPTool on Windows (Download Boot with the same file) also gets the tablet into Loader mode.
-2. `./write-loader-head.sh --board ifive-mini4s --lba-base tool`: writes `devices/ifive-mini4s/head-4M.bin` at raw sector 0, reads it back and checks the `RK32` tag at byte 0x8800. RKDevTool/AFPTool can write the same file at address 0.
-3. `./restore.sh --board ifive-mini4s`: all images.
+The stock partition table gives `system` 1536 MiB. This system needs 3072 MiB, and everything after `system` moves. `restore.sh` writes the new partition table, then all images. It asks you to type `restore` before it writes anything.
 
-`--lba-base tool` is the numbering of the bundled `rkdeveloptool` (tool LBA 0 = raw sector 0x2000). Without `--lba-base`, `write-loader-head.sh` finds the numbering by reading the loader head back at both candidate addresses.
+## Coming from an earlier build of this project
 
-## Adding a board
-Add `devices/<board>/device.json` plus `parameter-p1.img` (the 4 MiB p1 partition with 4 PARM structures at 0, 1, 2 and 3 MiB) and, from the first 8 MiB of that board's eMMC, `head-4M.bin`, `head-8M.bin` and `parameter-loader.img` (bytes 4..8 MiB, 8 PARM structures). `device.json` holds `board`, `display_name`, `stock_backup_dir`, `p1_parameter_gz`, `bootloader_8m_gz`, `parameter_region_lba`, `p1_lba`, `loader_area_note` and the sha256 of each file. The build checks the sizes, the PARM count, the `RK32` tag and the partition rule above.
+```sh
+sudo bash flash.sh --yes                   # wipes your data
+sudo bash flash.sh --yes --keep-userdata   # keeps your apps and data
+```
 
-## Magisk root
-When the Boot partition line above names Magisk, `flash.sh` already writes the Magisk boot. Otherwise write the Magisk boot image published next to the zip (Magisk 31.0) after flashing:
+`--dry-run` prints every command and writes nothing.
+
+Both scripts write in small pieces and read every piece back. If USB drops halfway, run the same command again and it continues where it stopped (`--fresh` starts over). The first boot takes a few minutes and shows kernel text on the screen.
+
+## Root
+
+Write the Magisk boot image from the same release over the boot partition:
 
 ```sh
 sha256sum -c ifive-mini4s-android16-boot-magisk-v31.img.sha256
-./tools/rkdeveloptool wl 0x16000 ../ifive-mini4s-android16-boot-magisk-v31.img
-./tools/rkdeveloptool rd
+sudo tools/rkdeveloptool wl 0x16000 ifive-mini4s-android16-boot-magisk-v31.img
+sudo tools/rkdeveloptool rd
 ```
 
-Then install the Magisk 31.0 app. If it shows `Not installed` after the first boot, run from the repository (needs `adb root`) and reboot:
+Install the Magisk 31.0 app. If it says "Not installed" after the first boot, run `scripts/magisk-install-data.sh Magisk-v31.0.apk` from the repository (needs `adb root`) and reboot. Flashing again with `flash.sh` takes root away.
+
+## Bricked
+
+**Partition table erased, bootloader still there.** The tablet still shows up as `Loader`. `sudo bash restore.sh`. On a tablet with no partition table at all, add `--board ifive-mini4s`.
+
+**eMMC completely blank.** The tablet shows up as `Maskrom`. In this order:
 
 ```sh
-scripts/magisk-install-data.sh Magisk-v31.0.apk
+sudo bash restore.sh --board ifive-mini4s --maskrom --parameters-only
+sudo bash write-loader-head.sh --board ifive-mini4s --lba-base tool
+sudo bash restore.sh --board ifive-mini4s
 ```
 
-It fills `/data/adb/magisk` the way Magisk's flashable-zip installer does. The app's own install step re-patches the boot image, and `magiskboot` cannot unpack this tablet's boot partition, which is a Rockchip `KRNL` container around a gzip cpio ramdisk. `scripts/make-magisk-boot.sh` builds the image with the ramdisk steps of Magisk's `boot_patch.sh`, adds `PREINITDEVICE=mmcblk0p13` to the Magisk config and repacks it with `tools/mkkrnl.py`. `flash.sh` writes the generic boot partition back.
+The first command loads `loader/rk3288_loader_v1.12.263.bin` into RAM and writes the partition table. The second writes the bootloader (`devices/ifive-mini4s/head-4M.bin`) to the first 4 MiB of the eMMC. The third writes the system. On Windows, RKDevTool can load the same loader file and write `head-4M.bin` at address 0.
 
-## Device identity
-`build.prop` in the system and vendor images names the tablet: brand `iFive`, model `iFive mini 4S`, name `ifive_mini4s`, device `mini4s`, and a matching `ro.build.fingerprint`. `ro.vendor.build.fingerprint` stays the Tinker Board Android 11 string of the vendor blobs. `scripts/patch-identity.sh` writes these keys; `ID_BRAND`, `ID_MANUFACTURER`, `ID_MODEL`, `ID_NAME`, `ID_DEVICE` change them.
+`sudo bash restore.sh --plan` prints where everything goes without touching the tablet.
 
-## Memory clock (DDR)
-- The loader starts the LPDDR2 at 396 MHz. The kernel's DDR frequency driver (`CONFIG_ARM_RK3288_DMC_DEVFREQ`, ported from the ChromeOS 4.19 RK3288 DMC, node `dmc-cros@ff610000`) runs on the devfreq `userspace` governor.
-- `/vendor/etc/init/hw/init.rk3288.rc` sets 456 MHz (the stock firmware's normal rate, vdd_logic 1.15 V) once boot completes. Notification-shade janky frames, 16 animations per arm: 42.0% and 43.3% at 396 MHz, 33.9% and 34.5% at 456 MHz.
-- The switch can corrupt the top lines of one frame, once per boot: the panel's vertical blank (194 µs) is shorter than a rate switch.
-- Back to 396 MHz until the next boot (root): `echo 396000000 > /sys/class/devfreq/ff610000.dmc-cros/userspace/set_freq`.
+## Where things go
 
-## Kernel timers
-- The device tree enables `timer@ff6b0000` (`rockchip,rk3288-timer`) as tick broadcast device, so the kernel runs high-resolution timers. SurfaceFlinger `missedFrames` per 72 s test went from 423-733 to 0-44.
-- Check (root): `grep -m1 -A1 "^Broadcast device" /proc/timer_list` shows `rk_timer`.
+`rkdeveloptool` counts from eMMC sector 0x2000, so tool LBA = eMMC sector − 0x2000. The bootloader lives in sectors 0x0000-0x1FFF, below tool LBA 0, which is why it has its own script.
 
-## Display composition (HWC)
-The HWC is the patched Rockchip HWC1 (`hwc/src-a16`), loaded through `hwc2on1adapter`.
-- Landscape: the 2048x2048 wallpaper is rotated once by RGA and shown on a VOP window; the RGA result is reused while the wallpaper is unchanged. App drawer janky frames 68-71% -> 44-47%.
-- More layers than VOP windows: unchanged bottom layers go into the client target, so SurfaceFlinger reuses its composition. Landscape shade janky frames 72-74% -> 47-50%.
-- Status bar and task bar share one VOP window; every layer added to a window group is checked against every layer of the group for overlapping scanlines.
-- `vendor/build.prop` sets `ro.surface_flinger.max_frame_buffer_acquired_buffers=3`. Recents opened from an app: janky frames 78-84% -> 43-47%.
+| File | Tool LBA | Size |
+|---|---|---|
+| `devices/ifive-mini4s/parameter-loader.img` | 0x0000 | 4 MiB |
+| `devices/ifive-mini4s/parameter-p1.img` | 0x2000 | 4 MiB |
+| `images/resource.img` | 0x6000 | 16 MiB |
+| `images/kernel.img` | 0xE000 | 16 MiB |
+| `images/ramdisk.img` (boot) | 0x16000 | 32 MiB |
+| `images/super.img` (system) | 0x92000 | 3072 MiB |
+| `images/metadata.img` | 0x692000 | 16 MiB |
+| `images/userdata-head-zero.img` (start of userdata) | 0x6BA000 | 1 MiB |
 
-## Charging
-- Powered off on the charger the tablet charges with the panel dark.
-- `persist.vendor.chg.boost=1` raises the adapter input current limit to 2 A (`vendor.chgpolicy`).
+The scripts read these addresses from `manifest.json`, which the build makes from the partition table in `images/resource.img` and the board's parameter file. There are no addresses typed into the scripts.
+
+## Other boards
+
+`devices/<board>/` holds a board's partition table and bootloader. To add one, copy `devices/ifive-mini4s/`, replace `parameter-p1.img` (that board's 4 MiB p1 partition), `parameter-loader.img`, `head-4M.bin` and `head-8M.bin` (from its first 8 MiB of eMMC), and fix the names and checksums in `device.json`. `restore.sh` refuses to write if that board's partition table and this package's disagree anywhere except the size of `system`.
 
 ## Known issues
-- Rare hard hang. The release kernel runs with `rkwdt=0` and writes a kernel log dump to the `kpanic` partition (`scripts/parse-logdump.py` reads it). The kernel command line `rkwdt=1 rkwdt_loader=1 rkwdt_sgrf=0x00420000` arms the hardware watchdog, which resets a hung tablet in 10-16 s and returns it to Maskrom.
+
+- The landscape app drawer still drops frames: launcher3 clips themed icons on the CPU. Picking the circle icon shape helps a lot.
+- Rarely, the tablet hard hangs. The kernel keeps a log in the `kpanic` partition.

@@ -34,6 +34,8 @@
 # Every write is read back and compared; any mismatch stops the script.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
+# some zip extractors drop the executable bit of the bundled tools
+chmod +x "$HERE"/tools/* 2>/dev/null || true
 RK=${RK:-${RKDEVELOPTOOL:-$(cd "$(dirname "$0")" && pwd)/tools/rkdeveloptool}}
 # No silent fallback to PATH: the bundled tool numbers wl/rl from the data
 # region (tool LBA = absolute eMMC sector - 0x2000; kernel.img written at

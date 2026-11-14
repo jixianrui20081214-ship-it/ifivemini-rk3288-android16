@@ -32,6 +32,8 @@
 # tools/rkdeveloptool, then rkdeveloptool in PATH).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
+# some zip extractors drop the executable bit of the bundled tools
+chmod +x "$HERE"/tools/* 2>/dev/null || true
 RK=${RKDEVELOPTOOL:-$HERE/tools/rkdeveloptool}
 # No PATH fallback: the bundled tool numbers wl/rl from the data region
 # (tool LBA 0 = the first sector after the 4 MiB loader area); a tool with

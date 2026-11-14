@@ -43,6 +43,8 @@
 # The tablet is not reset at the end.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
+# some zip extractors drop the executable bit of the bundled tools
+chmod +x "$HERE"/tools/* 2>/dev/null || true
 RK=${RK:-${RKDEVELOPTOOL:-$HERE/tools/rkdeveloptool}}
 # No PATH fallback: the bundled tool numbers wl/rl from the data region
 # (absolute eMMC sector - 0x2000); a build with absolute numbering would
