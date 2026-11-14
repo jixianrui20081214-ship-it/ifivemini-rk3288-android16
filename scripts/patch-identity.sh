@@ -29,7 +29,7 @@ for f in "$SYS" "$VEN"; do [ -f "$f" ] || { echo "STOP: no such image: $f"; exit
 mkdir -p "$OUTD"
 
 # patch_one stops with "exit 1" on several checks; a RETURN trap does not run on that path, which
-# is what left /tmp/ifive-identity.* directories behind. Collect them and clean up on EXIT instead.
+# is what left ifive-identity.* directories behind. Collect them and clean up on EXIT instead.
 WORK_DIRS=()
 trap '[ ${#WORK_DIRS[@]} -eq 0 ] || rm -rf "${WORK_DIRS[@]}"' EXIT
 
@@ -93,7 +93,7 @@ PY
 
 patch_one() { # <in.img> <prop path in image> <partition prefix> <out name>
     local img=$1 prop=$2 pfx=$3 out=$4 work dir st mode uid gid label
-    work=$(mktemp -d /tmp/ifive-identity.XXXXXX)
+    work=$(mktemp -d "${TMPDIR:-/tmp}/ifive-identity.XXXXXX")
     WORK_DIRS+=("$work")
     dir="$OUTD/$out"
     cp "$img" "$dir"
