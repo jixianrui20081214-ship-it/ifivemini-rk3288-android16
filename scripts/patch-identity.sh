@@ -83,9 +83,9 @@ for ln in lines:
     else:
         out.append(ln)
 added = [k for k in want if k not in replaced]
-out.append("")
-out.append("# device identity, written by scripts/patch-identity.sh")
-out += ["%s=%s" % (k, want[k]) for k in added]
+if added:
+    out += ["", "# device identity, written by scripts/patch-identity.sh"]
+    out += ["%s=%s" % (k, want[k]) for k in added]
 open(path, "w", encoding="utf-8").write("\n".join(out) + "\n")
 print("   build.prop: %d key(s) replaced, %d added" % (len(replaced), len(added)))
 PY

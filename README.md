@@ -51,6 +51,8 @@ These are the parts that make it boot on this tablet, and then drop fewer frames
 
 ## Building
 
+The system is the unofficial LineageOS 23.2 a64 GSI by [Lost-Entrepreneur439](https://github.com/Lost-Entrepreneur439/LineageOS-a64_gsi), build 2026-06-20.
+
 Linux x86_64. Clone with [git-lfs](https://git-lfs.com) installed: the stock bootloader files in `stock-backup/` are LFS objects.
 
 Fedora:
@@ -77,7 +79,8 @@ Then:
 (cd hwc && ./build.sh)                    # hwc/out/hwcomposer.rk30board.so
 cp hwc/out/hwcomposer.rk30board.so vendor-changes/lib/hw/
 
-./build-android-images.sh <lineage-gsi-system.img|.img.xz|.tar.xz> <release.zip>
+curl -LO https://github.com/Lost-Entrepreneur439/LineageOS-a64_gsi/releases/download/2026-06-20/lineage-23.2-20260620-a64-bvN.tar.xz
+./build-android-images.sh lineage-23.2-20260620-a64-bvN.tar.xz <release.zip>
 ./release-build/make-release.sh inputs <date>
 scripts/make-magisk-boot.sh inputs/ramdisk.img Magisk-v31.0.apk boot-magisk-v31.img
 ```
