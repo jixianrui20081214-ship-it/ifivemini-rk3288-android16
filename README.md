@@ -40,7 +40,7 @@ These are the parts that make it boot on this tablet, and then drop fewer frames
 | HWC checks every layer before two of them share a display window | `hwc/` | no more vertical stripes, no more black screen after screen off/on |
 | Three framebuffers instead of two | `vendor-changes/build.prop` | recents opened from an app jank 78% → 43% |
 | Rockchip Power HAL (`android.hardware.power-service.rockchip`) | `vendor-changes/` | Android finds `IPower`. Without it, early builds logged it missing and SurfaceFlinger started later |
-| Charging policy service | `vendor-changes/` | `persist.vendor.chg.boost=1` charges at 2 A |
+| Charging policy service (on by default) | `vendor-changes/` | the charger input goes from 500 mA to 2 A on a wall charger, while the battery is under 40 °C, the SoC under 70 °C and the charge under 95%. `setprop persist.vendor.chg.boost on` or `off` overrides it |
 | The tablet's own name in `build.prop` | `vendor-changes/`, `scripts/patch-identity.sh` | Settings and apps show "iFive mini 4S" |
 | Flash scripts that write in small verified pieces | `release-build/` | a dropped USB connection resumes instead of starting over |
 
