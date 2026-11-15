@@ -16,6 +16,7 @@
 # resulting fingerprint still describes the real Android 16 build inside them.
 
 set -euo pipefail
+HERE=$(cd "$(dirname "$0")" && pwd)
 
 BRAND=${ID_BRAND:-iFive}
 MANU=${ID_MANUFACTURER:-iFive}
@@ -102,6 +103,13 @@ add_permissive_su() { # <plat_sepolicy.cil> <unused>
     echo "   plat_sepolicy.cil: added (typepermissive su)"
 }
 
+# TrebleDroid's fs_mgr turns quota (and the ext4 project feature) off on /data when
+# the device has no file encryption, so vold cannot set project IDs on Android/data.
+# Each binary below carries its own copy of tune_quota(); see patch-fsmgr-quota.py.
+keep_quota() { # <binary> <unused>
+    python3 "$HERE/patch-fsmgr-quota.py" "$1" || exit 1
+}
+
 patch_one() { # <image> <file path in image> <editor function> <editor arg>
     local dir=$1 prop=$2 edit=$3 pfx=$4 work st mode uid gid label
     work=$(mktemp -d "${TMPDIR:-/tmp}/ifive-identity.XXXXXX")
@@ -144,6 +152,9 @@ echo "-- $SYS"
 cp "$SYS" "$OUTD/system.img"; cp "$VEN" "$OUTD/vendor.img"
 patch_one "$OUTD/system.img" /system/build.prop rewrite_props system
 patch_one "$OUTD/system.img" /system/etc/selinux/plat_sepolicy.cil add_permissive_su -
+for f in /system/lib/libfs_mgr.so /system/lib/libfs_mgr_binder.so /system/bin/vold /system/bin/update_engine; do
+    patch_one "$OUTD/system.img" "$f" keep_quota -
+done
 echo "-- $VEN"
 patch_one "$OUTD/vendor.img" /build.prop rewrite_props vendor
 echo "OK: $OUTD/system.img  $OUTD/vendor.img"
