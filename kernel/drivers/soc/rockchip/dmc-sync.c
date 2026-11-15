@@ -135,6 +135,8 @@ int rockchip_dmc_get(struct notifier_block *nb)
 		return -EINVAL;
 
 	mutex_lock(&en_lock);
+	if (num_wait == 0)
+		raw_notifier_call_chain(&en_chain, DMC_DISPLAY_ON, NULL);
 	/* This may call rockchip_dmc_lock/wait/unlock. */
 	if (num_wait == 1 && num_disable <= 0)
 		raw_notifier_call_chain(&en_chain, DMC_DISABLE, NULL);
@@ -181,6 +183,8 @@ int rockchip_dmc_put(struct notifier_block *nb)
 	/* This may call rockchip_dmc_lock/wait/unlock. */
 	if (num_wait == 1 && num_disable <= 0 && !ret)
 		raw_notifier_call_chain(&en_chain, DMC_ENABLE, NULL);
+	if (num_wait == 0 && !ret)
+		raw_notifier_call_chain(&en_chain, DMC_DISPLAY_OFF, NULL);
 	mutex_unlock(&en_lock);
 
 	return ret;

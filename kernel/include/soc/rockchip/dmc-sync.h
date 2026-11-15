@@ -32,6 +32,8 @@
 enum dmc_enable_op {
 	DMC_ENABLE = 0,
 	DMC_DISABLE,
+	DMC_DISPLAY_OFF,	/* the last scanning-out VOP stopped */
+	DMC_DISPLAY_ON,		/* a VOP starts scanning out with none before */
 };
 
 /* Only built with CONFIG_ARM_RK3288_DMC_DEVFREQ; users include it under it. */

@@ -20,6 +20,7 @@
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/thermal.h>
 
 #define CHG_STATE_ADP_INPUT 0x40
 #define CHG_STATE_USB_INPUT 0x80
@@ -81,12 +82,18 @@
 #define JEITA_VFCHG_H 4 /* BATSET2 VFCHG code, 13-47 C */
 #define JEITA_VFCHG_L 4 /* BATSET2 VFCHG code, 47-55 C */
 
-/* Raising the ADP limit above 500 mA is allowed only after userspace sets it */
-static bool high_current_allowed;
-module_param(high_current_allowed, bool, 0644);
-MODULE_PARM_DESC(high_current_allowed,
-		 "Allow raising the ADP input limit above 500 mA (default 0)");
-
+/*
+ * ADP input limit above 500 mA: 0 off (boot default), 1 auto (charge under
+ * 95% and SoC under 70 C), 2 on. Userspace sets it after boot from
+ * persist.vendor.chg.boost; the battery temperature bands below apply to
+ * both 1 and 2.
+ */
+enum { CHG_BOOST_OFF, CHG_BOOST_AUTO, CHG_BOOST_ON };
+static int chg_boost;
+module_param(chg_boost, int, 0644);
+MODULE_PARM_DESC(chg_boost, "ADP input limit above 500 mA: 0 off, 1 auto, 2 on");
+#define CHG_BOOST_MAX_SOC 95
+#define CHG_BOOST_MAX_SOC_TEMP 70000 /* mC */
 
 struct rn5t618_power_info {
 	struct rn5t618 *rn5t618;
@@ -872,13 +879,31 @@ static int rn5t618_chg_band(int temp, int prev)
 	return 2;
 }
 
+static bool rn5t618_boost_ok(struct rn5t618_power_info *info)
+{
+	union power_supply_propval cap;
+	struct thermal_zone_device *tz;
+	int soc_temp;
+
+	if (chg_boost == CHG_BOOST_ON)
+		return true;
+	if (chg_boost != CHG_BOOST_AUTO)
+		return false;
+	if (rn5t618_battery_capacity(info, &cap) || cap.intval >= CHG_BOOST_MAX_SOC)
+		return false;
+	tz = thermal_zone_get_zone_by_name("soc-thermal");
+	if (IS_ERR(tz) || thermal_zone_get_temp(tz, &soc_temp))
+		return false;
+	return soc_temp < CHG_BOOST_MAX_SOC_TEMP;
+}
+
 static int rn5t618_adp_target(struct rn5t618_power_info *info)
 {
 	union power_supply_propval temp, volt;
 	int cap = rn5t618_port_cur(info);
 	int band = 0;
 
-	if (!high_current_allowed) {
+	if (chg_boost == CHG_BOOST_OFF || !rn5t618_boost_ok(info)) {
 		info->chg_band = 2;
 		return ADP_SDP_CUR;
 	}

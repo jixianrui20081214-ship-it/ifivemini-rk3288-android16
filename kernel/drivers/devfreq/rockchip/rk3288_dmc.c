@@ -89,6 +89,15 @@ struct rk3288_dmcfreq {
 	 */
 	bool sync_disabled;
 
+	/*
+	 * With no display scanning out, the DDR runs at the lowest OPP: no
+	 * frame can be disturbed by a switch and nothing needs the bandwidth.
+	 * display_rate is the rate to go back to when a display starts again.
+	 */
+	struct work_struct display_work;
+	bool display_off;
+	unsigned long display_rate;
+
 	struct mutex cpufreq_mutex;
 	struct thermal_cooling_device *cdev;
 };
@@ -371,11 +380,36 @@ static void rk3288_dmc_register_cooling_dev(void)
 }
 
 /*
+ * DMC_DISPLAY_OFF / DMC_DISPLAY_ON: go to the lowest OPP while no VOP scans
+ * out, and back to the rate from before when one starts again. Runs from a
+ * work item: the notifier is called from the VOP's crtc enable/disable.
+ */
+static void rk3288_dmcfreq_display_work(struct work_struct *work)
+{
+	struct devfreq *df = dmcfreq.devfreq;
+	bool off = READ_ONCE(dmcfreq.display_off);
+	unsigned long freq = 0;
+
+	mutex_lock(&df->lock);
+	if (off) {
+		if (!dmcfreq.display_rate)
+			dmcfreq.display_rate = dmcfreq.rate;
+	} else {
+		freq = dmcfreq.display_rate;
+		dmcfreq.display_rate = 0;
+	}
+	if ((off || freq) && !rk3288_dmcfreq_target(dmcfreq.clk_dev, &freq, 0))
+		df->previous_freq = freq;
+	mutex_unlock(&df->lock);
+}
+
+/*
  * dmc-sync sends DMC_DISABLE when a rate change can no longer be synchronised
  * to a single display (more than one VOP scanning out) and on system suspend,
  * and DMC_ENABLE when that is over. ChromeOS forces the maximum rate on
  * DMC_DISABLE; this port keeps whatever rate is current and refuses rate
- * changes until DMC_ENABLE, so the DDR rate only ever changes on request.
+ * changes until DMC_ENABLE. Apart from userspace requests, the rate only
+ * changes on DMC_DISPLAY_OFF / DMC_DISPLAY_ON.
  */
 static int rk3288_dmc_enable_notify(struct notifier_block *nb,
 				    unsigned long action, void *data)
@@ -400,6 +434,10 @@ static int rk3288_dmc_enable_notify(struct notifier_block *nb,
 
 		devfreq_suspend_device(dmcfreq.devfreq);
 		rk3288_dmc_stop_hardware_counter();
+		return NOTIFY_OK;
+	} else if (action == DMC_DISPLAY_OFF || action == DMC_DISPLAY_ON) {
+		WRITE_ONCE(dmcfreq.display_off, action == DMC_DISPLAY_OFF);
+		schedule_work(&dmcfreq.display_work);
 		return NOTIFY_OK;
 	}
 
@@ -498,6 +536,7 @@ static int rk3288_dmcfreq_probe(struct platform_device *pdev)
 	rk3288_devfreq_dmc_profile.initial_freq = dmcfreq.rate;
 
 	INIT_WORK(&dmcfreq.work, rk3288_dmcfreq_work);
+	INIT_WORK(&dmcfreq.display_work, rk3288_dmcfreq_display_work);
 	/*
 	 * The "userspace" governor never picks a rate by itself: until
 	 * userspace writes set_freq it keeps devfreq->previous_freq, which is
