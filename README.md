@@ -24,6 +24,8 @@ The first boot takes a few minutes and prints kernel text on the screen. That's 
 
 Root: write `ifive-mini4s-android16-boot-magisk-v31.img` from the same release with `./tools/rkdeveloptool wl 0x16000 <file>`, then install the Magisk 31.0 app.
 
+Smoother app drawer: `adb install -r ifive-mini4s-launcher3-icon-cache.apk` from the same release. It is the stock Launcher3 with themed icons drawn once and cached. `adb shell pm uninstall-system-updates com.android.launcher3` goes back.
+
 Bricked it? The package README covers an erased partition table and a completely blank eMMC.
 
 ## What's different from just flashing a GSI
@@ -33,20 +35,30 @@ These are the parts that make it boot on this tablet, and then drop fewer frames
 | What | Where | Result |
 |---|---|---|
 | Linux 4.19 with drivers for this board: touch, Wi-Fi, audio, camera, charging, sensors | `kernel/` | it boots, and the hardware works |
-| DDR runs at 456 MHz instead of the loader's 396 MHz | kernel + `init.rk3288.rc` | shade animation jank 42% → 34% |
+| DDR runs at 456 MHz instead of the loader's 396 MHz while the screen is on, and at 396 MHz while no display is scanning out | kernel + `init.rk3288.rc` | shade animation jank 42% → 34% |
 | RK3288 timer as tick broadcast, so high-resolution timers exist at all | device tree | SurfaceFlinger missed frames 423-733 → 0-44 per test |
 | HWC rotates the landscape wallpaper with RGA instead of handing the whole screen to the GPU | `hwc/` | landscape app drawer jank 68% → 44% |
 | HWC keeps unchanged bottom layers composed when there are more layers than display windows | `hwc/` | landscape shade jank 72% → 47% |
 | HWC checks every layer before two of them share a display window | `hwc/` | no more vertical stripes, no more black screen after screen off/on |
 | Three framebuffers instead of two | `vendor-changes/build.prop` | recents opened from an app jank 78% → 43% |
 | Rockchip Power HAL (`android.hardware.power-service.rockchip`) | `vendor-changes/` | Android finds `IPower`. Without it, early builds logged it missing and SurfaceFlinger started later |
-| Charging policy service (on by default) | `vendor-changes/` | the charger input goes from 500 mA to 2 A on a wall charger, while the battery is under 40 °C, the SoC under 70 °C and the charge under 95%. `setprop persist.vendor.chg.boost on` or `off` overrides it |
+| Charger input limit policy in the `rn5t618` driver (on by default) | `kernel/`, `vendor-changes/` | the charger input goes from 500 mA to 2 A on a wall charger once boot completes, while the charge is under 95% and the SoC under 70 °C; the battery temperature steps it down to 1 A at 40 °C and 500 mA at 45 °C. `setprop persist.vendor.chg.boost on` or `off` overrides it |
 | The tablet's own name in `build.prop` | `vendor-changes/`, `scripts/patch-identity.sh` | Settings and apps show "iFive mini 4S" |
+| SELinux enforcing | device tree | Wi-Fi, charging, display and audio work with SELinux on |
+| `adb root` works under enforcing: AOSP's userdebug rule `permissive su`, which the GSI leaves out | `scripts/patch-identity.sh` | before: adbd exited and USB/wireless adb were gone until reboot |
+| HWC leaves frames that SurfaceFlinger composed on the GPU alone | `hwc/` | grayscale, night light and extra dim stay on (before: only while the shade was moving) |
+| Lowest backlight level is duty 61, the lowest value the panel still lights at | device tree | brightness slider goes lower without the screen turning off |
+| No `ro.hdmi.device_type` (the Tinker Board vendor declared a CEC playback box) | `vendor-changes/build.prop` | the `HdmiCecLocalDevicePlayback` wakelock no longer keeps the tablet from suspending |
+| Software gatekeeper and keymaster instead of the Rockchip OP-TEE ones (the board has no TEE) | `gatekeeper/`, `keymaster/`, `vendor-changes/` | lock-screen PIN, pattern and password can be set and unlocked; before, a PIN could be set but never verified |
+| Quota stays on for `/data`: the GSI's fs_mgr turned it off on every boot because the tablet has no file encryption (TrebleDroid patch 0015) | `scripts/patch-fsmgr-quota.py`, `scripts/patch-identity.sh` | apps such as Recorder can create their `Android/data` folder; before, vold could not set the folder's project ID and the app crashed |
+| vold reads the vendor fstab (`androidboot.fstab_suffix=rk30board.emmc`) | device tree bootargs | quota, reserved space and the microSD slot are known to vold; before, vold found no fstab |
 | Flash scripts that write in small verified pieces | `release-build/` | a dropped USB connection resumes instead of starting over |
 
 ## Not perfect
 
-- The landscape app drawer still drops a lot of frames. Launcher3 clips every themed icon on the CPU, every frame, because Skia turns off GPU path rendering on Mali-T. Turning off themed icons, or picking the circle icon shape, takes it down to about 20%.
+- The landscape app drawer drops about 65% of its frames with the stock Launcher3: it clips every themed icon on the CPU, every frame (Skia turns off GPU path rendering on Mali-T). The Launcher3 from the release brings it to 12-17%.
+- The landscape notification shade drops about half of its frames. Most of each slow frame is SystemUI's own work on its UI thread.
+- The battery level comes from the PMIC's fuel gauge. The device tree also lists a CW2015 gauge, but nothing answers at its address on this board; the node stays because the loader uses it for off-mode charging.
 - Rarely, the tablet hard hangs. The cause is still unknown. The kernel keeps a log in the `kpanic` partition; `scripts/parse-logdump.py` reads it.
 
 ## Building
@@ -85,12 +97,27 @@ curl -LO https://github.com/Lost-Entrepreneur439/LineageOS-a64_gsi/releases/down
 scripts/make-magisk-boot.sh inputs/ramdisk.img Magisk-v31.0.apk boot-magisk-v31.img
 ```
 
+The gatekeeper and keymaster services in `vendor-changes/bin/hw/` are built with the same NDK from an AOSP 16 source tree (any LineageOS 23.2 checkout that has been built once, for the generated HIDL headers in `out/`) and a few libraries pulled from the tablet:
+
+```sh
+mkdir libs && for l in liblog libbinder_ndk; do adb pull /system/lib/$l.so libs/; done
+for l in android.hardware.keymaster@4.0 libhidlbase libutils libcutils libbase libcrypto libc++; do
+    adb pull /apex/com.android.vndk.v30/lib/$l.so libs/; done
+adb shell su -c "cat /vendor/lib/libkeymaster4support.so" > libs/libkeymaster4support.so
+gatekeeper/build.sh <aosp-tree> libs      # vendor-changes/bin/hw/android.hardware.gatekeeper-service.ifive
+keymaster/build.sh <aosp-tree> libs       # vendor-changes/bin/hw/android.hardware.keymaster@4.0-service.ifive
+```
+
 `build-android-images.sh` takes vendor, odm, the boot ramdisk and `rkdeveloptool` from a release zip of this project, puts in the GSI system and `vendor-changes/`, and writes everything to `inputs/`. The zip ends up in `release/`.
+
+The Wi-Fi driver `bcmdhd.ko` comes with the vendor partition from that zip, built for this kernel. It needs `CONFIG_DEBUG_LIST=y` (it calls `__list_add_valid`), and any config change that alters exported symbols stops it from loading. Keep `kernel-configs/gsi-release.config` as it is, or rebuild the module with the kernel.
 
 ## Layout
 
 - `kernel/`, `kernel-configs/`: the kernel and its release / debug configs
 - `hwc/`: the patched Rockchip HWC1 and its build; `hwc/test/` has the jank measurements
+- `gatekeeper/`, `keymaster/`: build scripts for the software gatekeeper and keymaster services (the board has no TEE)
+- `launcher3/`: build script for the Launcher3 with cached themed icons
 - `vendor-changes/`: every file this project changes in the Tinker Board vendor image
 - `release-build/`: packaging, flash and rescue scripts, the device tree, the stock loader
 - `scripts/`: image and Magisk helpers
