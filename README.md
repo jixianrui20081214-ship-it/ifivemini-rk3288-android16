@@ -22,7 +22,7 @@ You need a Linux x86_64 PC. `rkdeveloptool` is in the package.
 
 The first boot takes a few minutes and prints kernel text on the screen. That's normal.
 
-Root: write `ifive-mini4s-android16-boot-magisk-v31.img` from the same release with `./tools/rkdeveloptool wl 0x16000 <file>`, then install the Magisk 31.0 app.
+Root: write `ifive-mini4s-android16-boot-magisk-v31.img` from the same release with `./tools/rkdeveloptool wl 0x16000 <file>`, boot, then run `scripts/magisk-install-data.sh Magisk-v31.0.apk` from this repository (it uses `adb root`) and reboot. The Magisk app cannot finish the install itself on this tablet.
 
 Smoother app drawer: `adb install -r ifive-mini4s-launcher3-icon-cache.apk` from the same release. It is the stock Launcher3 with themed icons drawn once and cached. `adb shell pm uninstall-system-updates com.android.launcher3` goes back.
 

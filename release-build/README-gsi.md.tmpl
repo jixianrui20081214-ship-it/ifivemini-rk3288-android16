@@ -53,7 +53,7 @@ sudo tools/rkdeveloptool wl 0x16000 ifive-mini4s-android16-boot-magisk-v31.img
 sudo tools/rkdeveloptool rd
 ```
 
-Install the Magisk 31.0 app. If it says "Not installed" after the first boot, run `scripts/magisk-install-data.sh Magisk-v31.0.apk` from the repository (needs `adb root`) and reboot. Flashing again with `flash.sh` takes root away.
+After the first boot, run `scripts/magisk-install-data.sh Magisk-v31.0.apk` from the repository (needs `adb root`) and reboot. The Magisk app cannot finish the install itself on this tablet. Flashing again with `flash.sh` takes root away.
 
 ## Bricked
 
