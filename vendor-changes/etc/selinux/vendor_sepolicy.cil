@@ -1387,6 +1387,12 @@
 (allow hal_camera_default property_socket_30_0 (sock_file (write)))
 (allow hal_camera_default init_30_0 (unix_stream_socket (connectto)))
 (allow hal_camera_default vendor_camera_prop (property_service (set)))
+;; iFive mini 4S: librga in the camera HAL sets vendor.rga_* (vendor_system_public_prop); the JPEG encoder reads /proc/version.
+(allow hal_camera_default vendor_system_public_prop (property_service (set)))
+(allow hal_camera_default proc_version_30_0 (file (read open getattr)))
+;; iFive mini 4S: the OMX codec (mediacodec) loads the same librga and reads /proc/version too.
+(allow mediacodec vendor_system_public_prop (property_service (set)))
+(allow mediacodec proc_version_30_0 (file (read open getattr)))
 (allow hal_camera_default vendor_camera_prop (file (read getattr map open)))
 (allow init_30_0 hal_drm_clearkey_exec (file (read getattr map execute open)))
 (allow init_30_0 hal_drm_clearkey (process (transition)))
@@ -1956,7 +1962,6 @@
 (allow shell_30_0 serial_device_30_0 (chr_file (ioctl read write getattr lock append map open watch watch_reads)))
 (allow shell_30_0 surfaceflinger_30_0 (fifo_file (ioctl read write getattr lock append map open watch watch_reads)))
 (allow shell_30_0 bootanim_exec_30_0 (file (getattr)))
-(allow shell_30_0 proc_cpuinfo_30_0 (file (mounton)))
 (allow shell_30_0 proc_kmsg_30_0 (file (getattr)))
 (allow shell_30_0 proc_iomem_30_0 (file (getattr)))
 (allow shell_30_0 proc_misc_30_0 (file (getattr)))
@@ -2126,7 +2131,6 @@
 (allow untrusted_app_30_0 ota_data_file_30_0 (dir (ioctl read write getattr lock open watch watch_reads add_name remove_name search)))
 (allow untrusted_app_30_0 ota_data_file_30_0 (file (ioctl read write getattr lock append map open watch watch_reads)))
 (allow untrusted_app_30_0 userdata_block_device_30_0 (blk_file (getattr)))
-(allow untrusted_app_30_0 oemfs_30_0 (file (execmod)))
 (dontaudit untrusted_app_30_0 mnt_vendor_file_30_0 (dir (search)))
 (allow untrusted_app_30_0 gpu_device_30_0 (dir (ioctl read getattr lock open watch watch_reads search)))
 (allow untrusted_app_30_0 gpu_device_30_0 (chr_file (ioctl read write getattr lock append map open watch watch_reads)))
@@ -2143,7 +2147,6 @@
 (allow untrusted_app_25_30_0 block_device_30_0 (dir (getattr search)))
 (allow untrusted_app_25_30_0 ota_data_file_30_0 (dir (ioctl read write getattr lock open watch watch_reads add_name remove_name search)))
 (allow untrusted_app_25_30_0 ota_data_file_30_0 (file (ioctl read write getattr lock append map open watch watch_reads)))
-(allow untrusted_app_25_30_0 oemfs_30_0 (file (execmod)))
 (allow untrusted_app_25_30_0 gpu_device_30_0 (dir (ioctl read getattr lock open watch watch_reads search)))
 (allow untrusted_app_25_30_0 gpu_device_30_0 (chr_file (ioctl read write getattr lock append map open watch watch_reads)))
 (allow untrusted_app_25_30_0 rga_device (chr_file (ioctl read write getattr lock append map open watch watch_reads)))
@@ -2157,7 +2160,6 @@
 (allow untrusted_app_27_30_0 block_device_30_0 (dir (getattr search)))
 (allow untrusted_app_27_30_0 ota_data_file_30_0 (dir (ioctl read write getattr lock open watch watch_reads add_name remove_name search)))
 (allow untrusted_app_27_30_0 ota_data_file_30_0 (file (ioctl read write getattr lock append map open watch watch_reads)))
-(allow untrusted_app_27_30_0 oemfs_30_0 (file (execmod)))
 (allow untrusted_app_27_30_0 gpu_device_30_0 (dir (ioctl read getattr lock open watch watch_reads search)))
 (allow untrusted_app_27_30_0 gpu_device_30_0 (chr_file (ioctl read write getattr lock append map open watch watch_reads)))
 (allow untrusted_app_27_30_0 rga_device (chr_file (ioctl read write getattr lock append map open watch watch_reads)))
@@ -2262,6 +2264,8 @@
 (allow vold_30_0 vold_exec_30_0 (file (execute_no_trans)))
 (allow vold_30_0 self (capability (dac_override dac_read_search)))
 (allow vold_30_0 sysfs_mmc (file (ioctl read write getattr lock append map open watch watch_reads)))
+;; iFive mini 4S: init.rc writes userdata queue/discard_max_bytes (eMMC sysfs is sysfs_mmc).
+(allow init_30_0 sysfs_mmc (file (write open)))
 (allow webview_zygote_30_0 zygote_30_0 (unix_dgram_socket (write)))
 (allow webview_zygote_30_0 zygote_exec_30_0 (file (ioctl read getattr lock map open watch watch_reads)))
 (allow webview_zygote_30_0 rga_device (chr_file (ioctl read write getattr lock append map open watch watch_reads)))
@@ -2369,12 +2373,19 @@
 (typeattributeset base_typeattr_550_30_0 ((and (domain) ((not (vndservicemanager_30_0))))))
 (typeattribute base_typeattr_549_30_0)
 (typeattributeset base_typeattr_549_30_0 ((and (domain) ((not (coredomain init_30_0 vendor_init_30_0))))))
-;; iFive mini 4S: vendor.chgpolicy (/vendor/bin/chgpolicy.sh) runs as vendor_shell. It reads
-;; the battery, charger and SoC temperature from sysfs, writes the rn5t618 module parameter
-;; high_current_allowed, and logs to /data/vendor/chg.
-(allow init_30_0 vendor_shell_30_0 (process (transition noatsecure rlimitinh siginh)))
-(allow vendor_shell_30_0 sysfs_30_0 (file (read open getattr write)))
-(allow vendor_shell_30_0 sysfs_thermal_30_0 (dir (search)))
-(allow vendor_shell_30_0 sysfs_thermal_30_0 (file (read open getattr)))
-(allow vendor_shell_30_0 vendor_data_file_30_0 (dir (search write add_name create getattr)))
-(allow vendor_shell_30_0 vendor_data_file_30_0 (file (create append write open getattr read)))
+;; iFive mini 4S: wakeup sources of the RC5T619 PMIC (RTC alarm, charger), read by
+;; system_suspend and system_server. The prefix also matches the wakeupN directory.
+(genfscon sysfs /devices/platform/ff650000.i2c/i2c-0/0-0032/rc5t619-rtc/wakeup (u object_r sysfs_wakeup ((s0) (s0))))
+(genfscon sysfs /devices/platform/ff650000.i2c/i2c-0/0-0032/rc5t619-rtc/rtc/rtc0/wakeup (u object_r sysfs_wakeup ((s0) (s0))))
+(genfscon sysfs /devices/platform/ff650000.i2c/i2c-0/0-0032/rn5t618-power/power_supply/rn5t618-adp/wakeup (u object_r sysfs_wakeup ((s0) (s0))))
+(genfscon sysfs /devices/platform/ff650000.i2c/i2c-0/0-0032/rn5t618-power/power_supply/rn5t618-battery/wakeup (u object_r sysfs_wakeup ((s0) (s0))))
+(genfscon sysfs /devices/platform/ff650000.i2c/i2c-0/0-0032/rn5t618-power/power_supply/rn5t618-usb/wakeup (u object_r sysfs_wakeup ((s0) (s0))))
+;; USB PHY and headset extcon cables: system_server (ExtconUEventObserver) reads their names.
+(genfscon sysfs /devices/platform/ff770000.syscon/ff770000.syscon:usbphy/extcon (u object_r sysfs_extcon ((s0) (s0))))
+(genfscon sysfs /devices/platform/rockchip-headset/extcon (u object_r sysfs_extcon ((s0) (s0))))
+;; iFive mini 4S: software gatekeeper (AIDL IGatekeeper + ISharedSecret/gatekeeper) instead of the
+;; Rockchip OP-TEE one; keystore2 negotiates the auth-token key with it and the software keymaster.
+(allow hal_gatekeeper_default hal_sharedsecret_service (service_manager (add find)))
+(allow keystore_30_0 hal_sharedsecret_service (service_manager (find)))
+(allow keystore_30_0 hal_gatekeeper_default (binder (call transfer)))
+(allow hal_gatekeeper_default keystore_30_0 (binder (transfer)))

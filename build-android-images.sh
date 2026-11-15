@@ -56,7 +56,7 @@ cp "$PKG/ramdisk.img" "$PKG/metadata.img" "$PKG/userdata-head-zero.img" "$PKG/rk
 chmod +x "$OUT_DIR/rkdeveloptool"
 rm "$PKG/super.img"
 
-echo "=== 4. Patch vendor (HWC, power HAL, chgpolicy, init.rk3288.rc, VINTF manifest, build.prop) ==="
+echo "=== 4. Patch vendor (files in vendor-changes/) ==="
 "$HERE/scripts/patch-vendor.sh" "$WORK_DIR/vendor.img" "$WORK_DIR/vendor-patched.img"
 
 echo "=== 5. Device identity (brand/model/fingerprint) ==="

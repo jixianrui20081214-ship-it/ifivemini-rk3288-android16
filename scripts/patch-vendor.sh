@@ -26,16 +26,50 @@ command -v e2fsck  >/dev/null 2>&1 || { echo "STOP: e2fsck not found (e2fsprogs)
 
 # path                            mode     owner   security.selinux
 TABLE="
-bin/chgpolicy.sh                  0100755  0:0     u:object_r:vendor_shell_exec:s0
 bin/hw/android.hardware.power-service.rockchip 0100755 0:2000 u:object_r:hal_power_default_exec:s0
 lib/hw/hwcomposer.rk30board.so    0100644  0:0     u:object_r:vendor_hal_file:s0
 etc/init/hw/init.rk3288.rc        0100644  0:0     u:object_r:vendor_configs_file:s0
+etc/init/hw/init.connectivity.rc 0100644  0:0     u:object_r:vendor_configs_file:s0
+etc/init/hw/init.rk30board.rc    0100644  0:0     u:object_r:vendor_configs_file:s0
+etc/init/hw/init.rockchip.rc     0100644  0:0     u:object_r:vendor_configs_file:s0
+etc/init/android.hardware.drm@1.3-service.widevine.rc 0100644 0:0 u:object_r:vendor_configs_file:s0
+bin/hw/android.hardware.gatekeeper-service.ifive 0100755 0:2000 u:object_r:hal_gatekeeper_default_exec:s0
+etc/init/android.hardware.gatekeeper-service.ifive.rc 0100644 0:0 u:object_r:vendor_configs_file:s0
+bin/hw/android.hardware.keymaster@4.0-service.ifive 0100755 0:2000 u:object_r:hal_keymaster_default_exec:s0
+etc/init/android.hardware.keymaster@4.0-service.ifive.rc 0100644 0:0 u:object_r:vendor_configs_file:s0
+etc/vintf/manifest/android.hardware.gatekeeper-service.ifive.xml 0100644 0:0 u:object_r:vendor_configs_file:s0
+etc/selinux/vendor_service_contexts 0100644 0:0 u:object_r:vendor_configs_file:s0
 etc/vintf/manifest.xml            0100644  0:0     u:object_r:vendor_configs_file:s0
 etc/selinux/vendor_sepolicy.cil     0100644  0:0     u:object_r:vendor_configs_file:s0
-build.prop                        0100600  0:0     u:object_r:vendor_file:s0
+etc/selinux/vendor_property_contexts 0100644 0:0  u:object_r:vendor_configs_file:s0
+etc/selinux/vendor_file_contexts 0100644 0:0  u:object_r:vendor_configs_file:s0
+build.prop                        0100644  0:0     u:object_r:vendor_file:s0
 "
 
 cp "$IN" "$OUT"
+
+# files earlier packages added that no longer exist in vendor-changes/; the Tinker
+# Board service for /vendor/bin/install-recovery.sh, which this vendor lacks; and
+# the OP-TEE services (gatekeeper, weaver, tee-supplicant): this board has no TEE
+REMOVE="bin/chgpolicy.sh etc/init/vendor_flash_recovery.rc
+etc/init/android.hardware.gatekeeper@1.0-service.optee.rc
+etc/vintf/manifest/android.hardware.gatekeeper@1.0-service.optee.xml
+etc/init/android.hardware.weaver@1.0-service.rc
+etc/vintf/manifest/android.hardware.weaver@1.0-service.xml
+etc/init/init.tee-supplicant.rc
+bin/tee-supplicant
+bin/hw/android.hardware.gatekeeper@1.0-service.optee lib/libRkgatekeeper.so
+bin/hw/android.hardware.weaver@1.0-service lib/hw/android.hardware.weaver@1.0-impl.so lib/libRkTeeWeaver.v1.so
+lib/optee_armtz/0b82bae5-0cd0-49a5-9521516dba9c43ba.ta
+lib/optee_armtz/258be795-f9ca-40e6-a8699ce6886c5d5d.ta
+lib/optee_armtz/481a57df-aec8-47ad-92f5eb9fc24f64a6.ta
+lib/libteec.so lib/libRkTeeKeymaster.so lib/libRkkeymaster4.so lib/libRkpurekeymasterdevice.so
+lib/libRkkeymaster_portable.so lib/libRkkeymaster_messages.so
+bin/hw/android.hardware.keymaster@4.0-service.soft etc/init/android.hardware.keymaster@4.0-service.soft.rc"
+for path in $REMOVE; do
+    debugfs -w -R "rm /$path" "$OUT" >/dev/null 2>&1 || true
+    debugfs -R "stat /$path" "$OUT" 2>&1 | grep -q "File not found" || { echo "STOP: /$path still in $OUT"; exit 1; }
+done
 
 echo "== writing"
 while read -r path mode owner label; do
@@ -60,7 +94,8 @@ while read -r path mode owner label; do
     st=$(debugfs -R "stat /$path" "$OUT" 2>/dev/null)
     got_mode=$(sed -n 's/.*Mode:[[:space:]]*\([0-7]\{3,4\}\).*/\1/p' <<< "$st" | head -1)
     got_user=$(sed -n 's/.*User:[[:space:]]*\([0-9]\{1,\}\)[[:space:]]*Group:[[:space:]]*\([0-9]\{1,\}\).*/\1:\2/p' <<< "$st" | head -1)
-    got_label=$(sed -n 's/.*security\.selinux *([0-9]*) *= *"\(.*\)"$/\1/p' <<< "$st" | head -1)
+    # stat leaves out values longer than 40 bytes; ea_get always prints the value
+    got_label=$(debugfs -R "ea_get /$path security.selinux" "$OUT" 2>/dev/null | sed -n 's/^security\.selinux *([0-9]*) *= *"\(.*\)"$/\1/p' | head -1)
     want_mode=$((8#${mode: -4}))          # sif sets the full mode, stat prints the permission bits
     want_label="$label\\000"              # debugfs prints the stored NUL as \000
     rm -f "$OUT.chk"
