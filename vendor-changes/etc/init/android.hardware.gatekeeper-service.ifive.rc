@@ -1,0 +1,4 @@
+service vendor.gatekeeper-ifive /vendor/bin/hw/android.hardware.gatekeeper-service.ifive
+    class early_hal
+    user system
+    group system

@@ -1,0 +1,15 @@
+Keymaster rejects every auth token: it compares the token blob size with
+sizeof(*auth_token), the size of a pointer, instead of sizeof(**auth_token).
+Fixed the same way in later system/keymaster (android-16 has sizeof(**auth_token)).
+
+--- a/android_keymaster/keymaster_enforcement.cpp	2026-11-15 18:18:20.292138002 +0800
++++ b/android_keymaster/keymaster_enforcement.cpp	2026-11-15 18:18:37.078724475 +0800
+@@ -458,7 +458,7 @@
+         return false;
+     }
+ 
+-    if (auth_token_blob.data_length != sizeof(*auth_token)) {
++    if (auth_token_blob.data_length != sizeof(**auth_token)) {
+         LOG_E("Bug: Auth token is the wrong size (%d expected, %d found)", sizeof(hw_auth_token_t),
+               auth_token_blob.data_length);
+         return false;
