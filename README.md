@@ -122,4 +122,4 @@ The Wi-Fi driver `bcmdhd.ko` comes with the vendor partition from that zip, buil
 - `release-build/`: packaging, flash and rescue scripts, the device tree, the stock loader
 - `scripts/`: image and Magisk helpers
 - `stock-backup/`: the stock partition table and bootloader, for the rescue data
-- `docs/`: release notes
+- `docs/`: release notes; `docs/tradeoffs.md` lists settings that cost something
