@@ -20,11 +20,11 @@
 # - Generally have "parameters" at the beginning that are filled in by
 #   the kernel.
 
-# This directory is only entered when CONFIG_ARM_RK3288_DMC_DEVFREQ is y or m
-# (see ../Makefile); the DMC SRAM blob is always linked into vmlinux so that
-# the modular driver can load it. The resume blob below is consumed by
-# rk3288_ddr_suspend.c, which this tree does not build, so it is not linked.
-obj-y += rk3288_sram.bin.o
+# The resume blob is copied to PMU SRAM by ../pm.c for deep sleep. The DMC
+# SRAM blob is linked into vmlinux even when the DMC driver is a module, so
+# that the module can load it.
+obj-$(CONFIG_PM_SLEEP) += rk3288_resume.bin.o
+obj-$(subst m,y,$(CONFIG_ARM_RK3288_DMC_DEVFREQ)) += rk3288_sram.bin.o
 
 targets := rk3288_resume.o rk3288_ddr_resume.o \
 	rk3288_resume.elf rk3288_resume.lds \
