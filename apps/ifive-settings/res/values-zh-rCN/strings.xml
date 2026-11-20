@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">iFive 设置</string>
+    <string name="summary">深度 Doze、休眠、DDR、充电</string>
+    <string name="doze_title">没有运动传感器时也进入深度 Doze</string>
+    <string name="doze_summary">平板没有 significant motion 传感器，不开省电模式时 Android 只进入浅度 Doze。重启后生效。</string>
+    <string name="sleep_title">内核深度睡眠</string>
+    <string name="sleep_summary">关闭后，休眠时只关 CPU，PLL、总线和 24 MHz 时钟保持开启。</string>
+    <string name="ddr_title">DDR 频率（亮屏时）</string>
+    <string-array name="ddr_entries">
+        <item>456 MHz（原厂固件）</item>
+        <item>396 MHz（loader）</item>
+    </string-array>
+    <string name="chg_title">充电输入超过 500 mA</string>
+    <string-array name="chg_entries">
+        <item>自动（电量低于 95%，SoC 低于 70 °C）</item>
+        <item>总是</item>
+        <item>从不</item>
+    </string-array>
+    <string name="reboot_note">重启后生效</string>
+</resources>

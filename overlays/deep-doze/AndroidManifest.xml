@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lets DeviceIdleController reach deep Doze without a significant-motion
+     sensor (the iFive mini 4S has none). Static: system_server only sees
+     immutable framework overlays. Applied when ro.vendor.ifive.deep_doze=1,
+     which init.rk3288.rc copies from persist.vendor.ifive.deep_doze (default 1,
+     set by the iFive settings app) before zygote starts. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.leohearts.overlay.deepdoze">
+    <overlay android:targetPackage="android" android:isStatic="true" android:priority="1"
+        android:requiredSystemPropertyName="ro.vendor.ifive.deep_doze"
+        android:requiredSystemPropertyValue="1" />
+    <application android:hasCode="false" />
+</manifest>

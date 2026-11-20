@@ -44,9 +44,28 @@ etc/selinux/vendor_sepolicy.cil     0100644  0:0     u:object_r:vendor_configs_f
 etc/selinux/vendor_property_contexts 0100644 0:0  u:object_r:vendor_configs_file:s0
 etc/selinux/vendor_file_contexts 0100644 0:0  u:object_r:vendor_configs_file:s0
 build.prop                        0100644  0:0     u:object_r:vendor_file:s0
+priv-app/IfiveSettings/IfiveSettings.apk 0100644 0:0 u:object_r:vendor_app_file:s0
+overlay/DeepDoze.apk              0100644  0:0     u:object_r:vendor_overlay_file:s0
+"
+# directories the files above need that the Tinker Board vendor image lacks
+DIRS="
+priv-app                          040755   0:2000  u:object_r:vendor_app_file:s0
+priv-app/IfiveSettings            040755   0:2000  u:object_r:vendor_app_file:s0
 "
 
 cp "$IN" "$OUT"
+
+while read -r path mode owner label; do
+    [ -n "$path" ] || continue
+    debugfs -R "stat /$path" "$OUT" 2>&1 | grep -q "File not found" || continue
+    debugfs -w "$OUT" >/dev/null <<EOF
+mkdir /$path
+sif /$path mode $mode
+sif /$path uid ${owner%%:*}
+sif /$path gid ${owner##*:}
+ea_set /$path security.selinux $label\\000
+EOF
+done <<< "$DIRS"
 
 # files earlier packages added that no longer exist in vendor-changes/; the Tinker
 # Board service for /vendor/bin/install-recovery.sh, which this vendor lacks; and

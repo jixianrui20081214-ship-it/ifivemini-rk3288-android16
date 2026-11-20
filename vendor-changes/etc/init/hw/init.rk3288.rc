@@ -19,9 +19,31 @@ on property:sys.boot_completed=1
 
 # DDR: the kernel keeps the bootloader's 396 MHz (rk3288 cros DMC, userspace
 # devfreq governor). 456 MHz is the stock firmware's NORMAL rate; the memory bus
-# saturates at 396 MHz during UI animations. One switch, after boot.
+# saturates at 396 MHz during UI animations. Set after boot; while no display
+# is scanning out the kernel drops to 396 MHz and comes back to this rate.
+# persist.vendor.ifive.ddr_freq=396|456 (iFive settings app; the two OPPs in the
+# device tree) overrides the 456 MHz default.
 on property:sys.boot_completed=1
     write /sys/class/devfreq/ff610000.dmc-cros/userspace/set_freq 456000000
+on property:sys.boot_completed=1 && property:persist.vendor.ifive.ddr_freq=396
+    write /sys/class/devfreq/ff610000.dmc-cros/userspace/set_freq 396000000
+on property:sys.boot_completed=1 && property:persist.vendor.ifive.ddr_freq=456
+    write /sys/class/devfreq/ff610000.dmc-cros/userspace/set_freq 456000000
+
+# Deep Doze without a motion sensor: the static vendor overlay
+# com.leohearts.overlay.deepdoze applies only when ro.vendor.ifive.deep_doze=1.
+# Set here, after persist properties load and before zygote scans overlays;
+# persist.vendor.ifive.deep_doze=0 (iFive settings app) turns it off.
+on post-fs-data
+    setprop ro.vendor.ifive.deep_doze ${persist.vendor.ifive.deep_doze:-1}
+
+# Kernel suspend level (arch/arm/mach-rockchip/pm.c): deep (logic off, DDR in
+# self-refresh, 32 kHz clock) by default; persist.vendor.ifive.deep_sleep=0
+# falls back to CPU-only off.
+on property:persist.vendor.ifive.deep_sleep=0
+    write /sys/module/pm/parameters/deep_sleep N
+on property:persist.vendor.ifive.deep_sleep=1
+    write /sys/module/pm/parameters/deep_sleep Y
 
 on boot
 

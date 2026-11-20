@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">iFive settings</string>
+    <string name="summary">Deep Doze, sleep, DDR, charging</string>
+    <string name="doze_title">Deep Doze without motion sensor</string>
+    <string name="doze_summary">The tablet has no significant-motion sensor, so Android only uses light Doze unless Battery Saver is on. Takes effect after a reboot.</string>
+    <string name="sleep_title">Kernel deep sleep</string>
+    <string name="sleep_summary">Off: suspend only turns the CPUs off (PLLs, bus and 24 MHz clock stay on).</string>
+    <string name="ddr_title">DDR frequency (screen on)</string>
+    <string-array name="ddr_entries">
+        <item>456 MHz (stock firmware)</item>
+        <item>396 MHz (bootloader)</item>
+    </string-array>
+    <string name="chg_title">Charger input above 500 mA</string>
+    <string-array name="chg_entries">
+        <item>Auto (battery under 95 %, SoC under 70 °C)</item>
+        <item>Always</item>
+        <item>Never</item>
+    </string-array>
+    <string name="reboot_note">Reboot to apply</string>
+</resources>

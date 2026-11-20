@@ -73,3 +73,7 @@ media.settings.xml		u:object_r:vendor_system_public_prop:s0
 # empty property_contexts file - this file is used to generate an empty
 # non-platform property context for devices without any property_contexts
 # customizations.
+# iFive mini 4S: switches the iFive settings app (priv-app) sets; init.rk3288.rc acts on them.
+persist.vendor.chg.boost                u:object_r:vendor_ifive_settings_prop:s0
+persist.vendor.ifive.                   u:object_r:vendor_ifive_settings_prop:s0
+ro.vendor.ifive.                        u:object_r:vendor_ifive_settings_prop:s0

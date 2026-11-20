@@ -42,7 +42,7 @@ These are the parts that make it boot on this tablet, and then drop fewer frames
 | HWC checks every layer before two of them share a display window | `hwc/` | no more vertical stripes, no more black screen after screen off/on |
 | Three framebuffers instead of two | `vendor-changes/build.prop` | recents opened from an app jank 78% → 43% |
 | Rockchip Power HAL (`android.hardware.power-service.rockchip`) | `vendor-changes/` | Android finds `IPower`. Without it, early builds logged it missing and SurfaceFlinger started later |
-| Charger input limit policy in the `rn5t618` driver (on by default) | `kernel/`, `vendor-changes/` | the charger input goes from 500 mA to 2 A on a wall charger once boot completes, while the charge is under 95% and the SoC under 70 °C; the battery temperature steps it down to 1 A at 40 °C and 500 mA at 45 °C. `setprop persist.vendor.chg.boost on` or `off` overrides it |
+| Charger input limit policy in the `rn5t618` driver (on by default) | `kernel/`, `vendor-changes/` | the charger input goes from 500 mA to 2 A on a wall charger once boot completes, while the charge is under 95% and the SoC under 70 °C; the battery temperature steps it down to 1 A at 40 °C and 500 mA at 45 °C. iFive settings (or `persist.vendor.chg.boost` `on`/`off`) overrides it |
 | The tablet's own name in `build.prop` | `vendor-changes/`, `scripts/patch-identity.sh` | Settings and apps show "iFive mini 4S" |
 | SELinux enforcing | device tree | Wi-Fi, charging, display and audio work with SELinux on |
 | `adb root` works under enforcing: AOSP's userdebug rule `permissive su`, which the GSI leaves out | `scripts/patch-identity.sh` | before: adbd exited and USB/wireless adb were gone until reboot |
@@ -53,6 +53,9 @@ These are the parts that make it boot on this tablet, and then drop fewer frames
 | Quota stays on for `/data`: the GSI's fs_mgr turned it off on every boot because the tablet has no file encryption (TrebleDroid patch 0015) | `scripts/patch-fsmgr-quota.py`, `scripts/patch-identity.sh` | apps such as Recorder can create their `Android/data` folder; before, vold could not set the folder's project ID and the app crashed |
 | vold reads the vendor fstab (`androidboot.fstab_suffix=rk30board.emmc`) | device tree bootargs | quota, reserved space and the microSD slot are known to vold; before, vold found no fstab |
 | Flash scripts that write in small verified pieces | `release-build/` | a dropped USB connection resumes instead of starting over |
+| Kernel suspend turns the logic power domain, PLLs and 24 MHz clock off, with DDR in self-refresh (the stock firmware's `ARMOFF_LOGDP` mode; code from the ChromeOS veyron kernel) | `kernel/arch/arm/mach-rockchip/` | before, suspend only turned the CPUs off |
+| Deep Doze without a significant-motion sensor: a vendor overlay sets `config_autoPowerModeUseMotionSensor` to false | `overlays/deep-doze/`, `vendor-changes/` | the tablet reaches deep Doze about 2.5 minutes after the screen goes off unplugged; before, only Battery Saver got it there |
+| "iFive settings" on the Settings home page: deep Doze, kernel deep sleep, DDR frequency (456/396 MHz), charger input | `apps/ifive-settings/`, `vendor-changes/` | each one can be turned off without adb; deep Doze takes effect after a reboot, the others at once |
 
 ## Not perfect
 
@@ -108,6 +111,13 @@ gatekeeper/build.sh <aosp-tree> libs      # vendor-changes/bin/hw/android.hardwa
 keymaster/build.sh <aosp-tree> libs       # vendor-changes/bin/hw/android.hardware.keymaster@4.0-service.ifive
 ```
 
+The deep Doze overlay and the iFive settings app need the Android SDK (build-tools 36.1.0, platforms/android-36) and a JDK:
+
+```sh
+overlays/build.sh                         # vendor-changes/overlay/DeepDoze.apk
+apps/ifive-settings/build.sh              # vendor-changes/priv-app/IfiveSettings/IfiveSettings.apk
+```
+
 `build-android-images.sh` takes vendor, odm, the boot ramdisk and `rkdeveloptool` from a release zip of this project, puts in the GSI system and `vendor-changes/`, and writes everything to `inputs/`. The zip ends up in `release/`.
 
 The Wi-Fi driver `bcmdhd.ko` comes with the vendor partition from that zip, built for this kernel. It needs `CONFIG_DEBUG_LIST=y` (it calls `__list_add_valid`), and any config change that alters exported symbols stops it from loading. Keep `kernel-configs/gsi-release.config` as it is, or rebuild the module with the kernel.
@@ -118,6 +128,7 @@ The Wi-Fi driver `bcmdhd.ko` comes with the vendor partition from that zip, buil
 - `hwc/`: the patched Rockchip HWC1 and its build; `hwc/test/` has the jank measurements
 - `gatekeeper/`, `keymaster/`: build scripts for the software gatekeeper and keymaster services (the board has no TEE)
 - `launcher3/`: build script for the Launcher3 with cached themed icons
+- `overlays/`, `apps/ifive-settings/`: the deep Doze overlay and the iFive settings app, installed in the vendor image
 - `vendor-changes/`: every file this project changes in the Tinker Board vendor image
 - `release-build/`: packaging, flash and rescue scripts, the device tree, the stock loader
 - `scripts/`: image and Magisk helpers
