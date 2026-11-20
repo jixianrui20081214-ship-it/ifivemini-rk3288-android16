@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Switches for the changes this port adds, shown on the Settings home page
      (same injection as phh's Treble settings). Installed as a vendor priv-app:
-     the vendor SELinux policy lets priv_app set its properties. -->
+     the vendor SELinux policy lets priv_app set its properties. phh's own
+     Settings entry is hidden by /vendor/etc/permissions/ifive-settings.xml;
+     this app links to phh's settings instead. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.leohearts.ifivesettings">
     <application android:label="@string/app_name" android:icon="@drawable/ic_settings"
@@ -18,6 +20,11 @@
                 android:resource="@drawable/ic_settings" />
             <meta-data android:name="com.android.settings.summary"
                 android:resource="@string/summary" />
+            <!-- the Storage / Battery / System / About card; grey like System -->
+            <meta-data android:name="com.android.settings.group_key"
+                android:value="top_level_system_info_category" />
+            <meta-data android:name="com.android.settings.icon_color_scheme"
+                android:value="grey" />
         </activity>
     </application>
 </manifest>

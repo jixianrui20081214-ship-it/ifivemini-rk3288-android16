@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hides phh's TrebleDroid entry on the Settings home page; the iFive
+     settings app (/vendor/priv-app/IfiveSettings) links to it instead. -->
+<permissions>
+    <component-override package="me.phh.treble.app">
+        <component class=".TopLevelSettingsActivity" enabled="false" />
+    </component-override>
+</permissions>

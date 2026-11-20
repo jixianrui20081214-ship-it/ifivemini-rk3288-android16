@@ -18,4 +18,6 @@
         <item>从不</item>
     </string-array>
     <string name="reboot_note">重启后生效</string>
+    <string name="treble_title">TrebleDroid 设置</string>
+    <string name="treble_summary">phh 为 GSI 写的选项，面向很多其他手机。大部分没在这台平板上测试过，不清楚作用的请不要改。</string>
 </resources>

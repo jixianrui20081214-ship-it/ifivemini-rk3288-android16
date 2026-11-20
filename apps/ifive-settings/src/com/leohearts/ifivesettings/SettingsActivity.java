@@ -1,7 +1,9 @@
 package com.leohearts.ifivesettings;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.preference.ListPreference;
 import android.preference.Preference;
@@ -18,6 +20,8 @@ import android.widget.Toast;
  *  - charger boost: persist.vendor.chg.boost, init.rk3288.rc writes rn5t618 chg_boost;
  *  - kernel deep sleep: persist.vendor.ifive.deep_sleep, init writes /sys/module/pm/parameters/deep_sleep;
  *  - DDR: persist.vendor.ifive.ddr_freq (396 or 456), init writes the dmc-cros userspace set_freq.
+ * The last entry opens phh's TrebleDroid settings; its own Settings entry is
+ * hidden by <component-override> in /vendor/etc/permissions/ifive-settings.xml.
  * SystemProperties is not in the public SDK, so it is called by reflection; the
  * SELinux rules that let priv_app set these properties live in the vendor image.
  */
@@ -54,6 +58,13 @@ public class SettingsActivity extends Activity {
             s.addPreference(list(c, R.string.chg_title, R.array.chg_entries,
                     new String[] {"auto", "on", "off"}, chg.isEmpty() ? "auto" : chg,
                     v -> setProp("persist.vendor.chg.boost", v)));
+
+            Preference treble = new Preference(c);
+            treble.setTitle(R.string.treble_title);
+            treble.setSummary(R.string.treble_summary);
+            treble.setIntent(new Intent().setComponent(new ComponentName(
+                    "me.phh.treble.app", "me.phh.treble.app.SettingsActivity")));
+            s.addPreference(treble);
         }
     }
 

@@ -44,6 +44,7 @@ etc/selinux/vendor_sepolicy.cil     0100644  0:0     u:object_r:vendor_configs_f
 etc/selinux/vendor_property_contexts 0100644 0:0  u:object_r:vendor_configs_file:s0
 etc/selinux/vendor_file_contexts 0100644 0:0  u:object_r:vendor_configs_file:s0
 build.prop                        0100644  0:0     u:object_r:vendor_file:s0
+etc/permissions/ifive-settings.xml 0100644  0:0     u:object_r:vendor_configs_file:s0
 priv-app/IfiveSettings/IfiveSettings.apk 0100644 0:0 u:object_r:vendor_app_file:s0
 overlay/DeepDoze.apk              0100644  0:0     u:object_r:vendor_overlay_file:s0
 "

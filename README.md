@@ -55,7 +55,7 @@ These are the parts that make it boot on this tablet, and then drop fewer frames
 | Flash scripts that write in small verified pieces | `release-build/` | a dropped USB connection resumes instead of starting over |
 | Kernel suspend turns the logic power domain, PLLs and 24 MHz clock off, with DDR in self-refresh (the stock firmware's `ARMOFF_LOGDP` mode; code from the ChromeOS veyron kernel) | `kernel/arch/arm/mach-rockchip/` | before, suspend only turned the CPUs off |
 | Deep Doze without a significant-motion sensor: a vendor overlay sets `config_autoPowerModeUseMotionSensor` to false | `overlays/deep-doze/`, `vendor-changes/` | the tablet reaches deep Doze about 2.5 minutes after the screen goes off unplugged; before, only Battery Saver got it there |
-| "iFive settings" on the Settings home page: deep Doze, kernel deep sleep, DDR frequency (456/396 MHz), charger input | `apps/ifive-settings/`, `vendor-changes/` | each one can be turned off without adb; deep Doze takes effect after a reboot, the others at once |
+| "iFive settings" on the Settings home page (System card): deep Doze, kernel deep sleep, DDR frequency (456/396 MHz), charger input, and a link to phh's TrebleDroid settings, whose own home-page entry is hidden (`<component-override>`) | `apps/ifive-settings/`, `vendor-changes/` | each one can be turned off without adb; deep Doze takes effect after a reboot, the others at once |
 
 ## Not perfect
 

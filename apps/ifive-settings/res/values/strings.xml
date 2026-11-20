@@ -18,4 +18,6 @@
         <item>Never</item>
     </string-array>
     <string name="reboot_note">Reboot to apply</string>
+    <string name="treble_title">TrebleDroid settings</string>
+    <string name="treble_summary">phh\'s GSI options, written for many other phones. Most are untested on this tablet; leave alone what you do not know.</string>
 </resources>
