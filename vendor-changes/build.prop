@@ -37,7 +37,10 @@ ro.bootimage.build.fingerprint=asus/WW_Tinker_Board/WW_Tinker_Board:11/RQ3A.2107
 #
 dalvik.vm.heapstartsize=16m
 dalvik.vm.heapgrowthlimit=192m
-dalvik.vm.heapsize=512m
+# 384m, not the AOSP 2 GB value of 512m: ART reserves twice this much address
+# space for every largeHeap app, and 32-bit apps only have 3 GiB. At 512m
+# YouTube used up its address space and aborted on a GPU allocation.
+dalvik.vm.heapsize=384m
 dalvik.vm.heaptargetutilization=0.75
 dalvik.vm.heapminfree=512k
 dalvik.vm.heapmaxfree=8m
