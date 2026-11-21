@@ -1,0 +1,191 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * BBK Smart S2 (H2000) display: backlight, panel power/reset pins, VOPB and
+ * the 9.7" 1536x2048 MIPI DSI panel.  Included by rk3288-bbk-s2.dts.
+ *
+ * All values below are taken from the stock Android 5.0.2 device tree that
+ * was extracted from the shipping boot.img resource partition (RSCE) —
+ * see H2_PORTING_PROFILE.md.
+ *
+ * Stock (kernel 3.10) references:
+ *   display-timings/timing0 : MIPI DSI, screen-type 9, 1536x2048
+ *   mipi_dsi_init           : dsi_lane 4, dsi_hs_clk 1000, mipi_dsi_num 2
+ *   mipi_power_ctr/mipi_lcd_rst : gpio8 pin 9  (PB1)
+ *   mipi_power_ctr/mipi_lcd_enz : gpio7 pin 2  (PA2)
+ *   mipi_power_ctr/mipi_lcd_enf : gpio7 pin 11 (PB3)
+ *   backlight               : pwm0, period 50000 ns (20 kHz)
+ */
+
+#include <dt-bindings/display/drm_mipi_dsi.h>
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		status = "okay";
+		/* Stock period 50000 ns = 20 kHz, pwm0 channel 0. */
+		pwms = <&pwm0 0 50000 0>;
+		/* Stock /mipi_power_ctr/mipi_lcd_enf -> GPIO7_B3. */
+		enable-gpios = <&gpio7 RK_PB3 GPIO_ACTIVE_HIGH>;
+		/*
+		 * Linear ramp.  The stock table starts at level 8 and is
+		 * monotonic; 4.19 pwm_bl uses the table as-is, so keep a plain
+		 * 0..255 ladder and tune by eye once the panel reports video.
+		 */
+		brightness-levels = <
+			  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+			 16  17  18  19  20  21  22  23  24  25  26  27  28  29  30  31
+			 32  33  34  35  36  37  38  39  40  41  42  43  44  45  46  47
+			 48  49  50  51  52  53  54  55  56  57  58  59  60  61  62  63
+			 64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
+			 80  81  82  83  84  85  86  87  88  89  90  91  92  93  94  95
+			 96  97  98  99 100 101 102 103 104 105 106 107 108 109 110 111
+			112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127
+			128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143
+			144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159
+			160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175
+			176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191
+			192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207
+			208 209 210 211 212 213 214 215 216 217 218 219 220 221 222 223
+			224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239
+			240 241 242 243 244 245 246 247 248 249 250 251 252 253 254 255
+		>;
+		default-brightness-level = <160>;
+	};
+};
+
+&pinctrl {
+	lcd {
+		lcd_en_pins: lcd-en-pins {
+			rockchip,pins = <7 RK_PA2 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+
+		lcd_rst_pins: lcd-rst-pins {
+			rockchip,pins = <8 RK_PB1 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+
+		lcd_bl_en_pins: lcd-bl-en-pins {
+			rockchip,pins = <7 RK_PB3 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+};
+
+&pwm0 {
+	status = "okay";
+};
+
+/*
+ * Stock pixel clock is 204,996,928 Hz (~205 MHz) from timing0.
+ * NPLL is 460 MHz on this SoC configuration; 460/2 = 230 MHz is what iFive
+ * uses, so route dclk_vop0 through NPLL and let the fractional divider land
+ * as close to 205 MHz as it can.  If the panel stays dark this is one of the
+ * first knobs to revisit (see PORTING_PLAN_ANDROID16.md).
+ */
+&vopb {
+	assigned-clocks = <&cru DCLK_VOP0>;
+	assigned-clock-parents = <&cru PLL_NPLL>;
+	status = "okay";
+};
+
+&dsi0 {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	panel: panel@0 {
+		compatible = "simple-panel-dsi";
+		reg = <0>;
+
+		backlight = <&backlight>;
+		power-supply = <&vcc_lcd>;
+		vcc_lcd-supply = <&vcc_lcd>;
+
+		/* Stock mipi_lcd_enz = GPIO7_A2, mipi_lcd_rst = GPIO8_B1. */
+		enable-gpios = <&gpio7 RK_PA2 GPIO_ACTIVE_HIGH>;
+		reset-gpios  = <&gpio8 RK_PB1 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&lcd_en_pins &lcd_rst_pins &lcd_bl_en_pins>;
+
+		prepare-delay-ms = <10>;
+		reset-delay-ms   = <10>;
+		init-delay-ms    = <10>;
+
+		/* Stock mipi_dsi_init: 4 lanes. */
+		dsi,flags  = <(MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST | MIPI_DSI_MODE_LPM)>;
+		dsi,format = <MIPI_DSI_FMT_RGB888>;
+		dsi,lanes  = <4>;
+
+		/*
+		 * Stock /screen-on-cmds on-cmds1 .. on-cmds19, converted from
+		 * the kernel 3.10 {rockchip,cmd} word arrays into the 4.19
+		 * {data_type, delay_ms, payload_len, payload...} byte stream.
+		 * Panel command set unlocks with 39 FF AA 55 and selects the
+		 * manufacturer page with 39 F0 55 AA (Ilitek style).
+		 */
+		panel-init-sequence = [
+			39 00 03 ff aa 55
+			15 00 02 6f 0b
+			15 00 02 f7 e0
+			39 00 03 ff aa 55
+			39 00 03 f0 55 aa
+			15 00 02 ef 03
+			39 00 03 f0 55 aa
+			15 00 02 ec 4c
+			39 00 03 f0 55 aa
+			15 00 02 b1 ee
+			39 00 03 c0 03 02
+			39 00 03 f0 55 aa
+			15 00 02 62 01
+			15 00 02 35 00
+			39 00 03 f0 55 aa
+			15 00 02 b3 28
+			15 00 02 b4 23
+			05 00 01 11
+			05 0a 01 29
+		];
+
+		display-timings {
+			native-mode = <&timing0>;
+
+			timing0: timing0 {
+				clock-frequency = <204996928>;
+				hactive        = <1536>;
+				vactive        = <2048>;
+				hsync-len      = <15>;
+				hback-porch    = <4>;
+				hfront-porch   = <16>;
+				vsync-len      = <1>;
+				vback-porch    = <3>;
+				vfront-porch   = <7>;
+				hsync-active   = <0>;
+				vsync-active   = <0>;
+				de-active      = <0>;
+				pixelclk-active = <0>;
+			};
+		};
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out_panel>;
+			};
+		};
+	};
+};
+
+&dsi0_in_vopl {
+	status = "disabled";
+};
+
+&dsi0_in_vopb {
+	status = "okay";
+};
+
+&dsi0_out {
+	remote-endpoint = <&panel_in>;
+	data-lanes = <1 2 3 4>;
+};
+
+&route_dsi0 {
+	status = "okay";
+	connect = <&vopb_out_dsi0>;
+};
