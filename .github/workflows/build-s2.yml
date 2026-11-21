@@ -48,7 +48,6 @@ jobs:
           mkdir -p "$O"
           cp "kernel-configs/$CFG.config" "$O/.config"
           make -C kernel O="$O" olddefconfig
-          # 需要编译的 DTB 列表：iFive 必编；S2 若存在则一起编
           DTBS="rk3288-ifive-mini4s.dtb"
           if [ -f kernel/arch/arm/boot/dts/rk3288-bbk-s2.dts ]; then
             DTBS="$DTBS rk3288-bbk-s2.dtb"
@@ -68,12 +67,39 @@ jobs:
           python3 release-build/tools/mkkrnl.py verify "$O/kernel.img"
           ls -lh "$O/kernel.img"
 
-      - name: Build resource.img
+      - name: Build resource.img (iFive reference)
         run: |
           set -euo pipefail
           chmod +x release-build/tools/resource_tool release-build/tools/dtc || true
           ./release-build/build-resource.sh
           ls -lh release-build/resource-release-gsi.img
+
+      - name: Build BBK S2 resource.img from our own DTB
+        run: |
+          set -euo pipefail
+          W=$(mktemp -d)
+          # 从现有 resource 里取开机 logo（纯装饰，先用 iFive 的）
+          release-build/tools/resource_tool --unpack \
+            --image=release-build/resource-release-gsi.img "$W/old" >/dev/null
+          ls -l "$W/old"
+          DTB=out/kernel-gsi-release/arch/arm/boot/dts/rk3288-bbk-s2.dtb
+          if [ ! -f "$DTB" ]; then
+            echo "::warning::没有 rk3288-bbk-s2.dtb，跳过 S2 resource 打包"
+            exit 0
+          fi
+          release-build/tools/resource_tool --pack \
+            --image="$W/res-bbk-s2.img" "$DTB" \
+            "$W/old/logo.bmp" "$W/old/logo_kernel.bmp" >/dev/null
+          # RK 要求 resource 分区为 16 MiB
+          truncate -s 16777216 "$W/res-bbk-s2.img"
+          cp "$W/res-bbk-s2.img" resource-bbk-s2.img
+          echo "--- 校验 RSCE 魔数 ---"
+          xxd -p -l 4 resource-bbk-s2.img
+          echo "--- 反解确认里面是我们的 DTB ---"
+          release-build/tools/resource_tool --unpack --image=resource-bbk-s2.img "$W/check" >/dev/null
+          release-build/tools/dtc -I dtb -O dts "$W/check/rk-kernel.dtb" 2>/dev/null \
+            | grep -m3 -E 'model|compatible' || true
+          ls -lh resource-bbk-s2.img
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -83,5 +109,6 @@ jobs:
             out/kernel-gsi-release/kernel.img
             out/kernel-gsi-release/arch/arm/boot/dts/*.dtb
             release-build/resource-release-gsi.img
+            resource-bbk-s2.img
           if-no-files-found: error
           retention-days: 30
