@@ -110,10 +110,10 @@
 		reset-delay-ms   = <10>;
 		init-delay-ms    = <10>;
 
-		/* Stock mipi_dsi_init: 4 lanes. */
+		/* Stock mipi_dsi_init: mipi_dsi_num=2, dsi_lane=4 -> 2x4 = 8 lanes (dual channel, like iFive). */
 		dsi,flags  = <(MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST | MIPI_DSI_MODE_LPM)>;
 		dsi,format = <MIPI_DSI_FMT_RGB888>;
-		dsi,lanes  = <4>;
+		dsi,lanes  = <8>;
 
 		/*
 		 * Stock /screen-on-cmds on-cmds1 .. on-cmds19, converted from
@@ -170,22 +170,4 @@
 			};
 		};
 	};
-};
-
-&dsi0_in_vopl {
-	status = "disabled";
-};
-
-&dsi0_in_vopb {
-	status = "okay";
-};
-
-&dsi0_out {
-	remote-endpoint = <&panel_in>;
-	data-lanes = <1 2 3 4>;
-};
-
-&route_dsi0 {
-	status = "okay";
-	connect = <&vopb_out_dsi0>;
 };
