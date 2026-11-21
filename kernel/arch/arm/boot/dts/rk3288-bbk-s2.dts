@@ -673,12 +673,15 @@
 };
 
 /*
- * Touch: Goodix GT9xx on I2C3 (stock i2c@ff160000, node ts@02, addr 0x14).
+ * Touch: Goodix GT9xx on i2c@ff160000 (stock node ts@02, addr 0x14).
+ * NOTE: in this 4.19 tree the label numbering is not sequential -
+ * i2c4 -> i2c@ff160000, while i2c3 -> i2c@ff150000.  The stock touch is
+ * on ff160000, so the label must be i2c4 (same bus iFive uses for its ts).
  * Stock irq_gpio_number <3 6 8> = GPIO3_A6 (flag 8), rst_gpio_number
  * <3 5 0> = GPIO3_A5.  Stock xy_swap=1, screen 1536x2048.
  * The driver is drivers/input/touchscreen/gt9xx/.
  */
-&i2c3 {
+&i2c4 {
 	status = "okay";
 	clock-frequency = <400000>;
 
