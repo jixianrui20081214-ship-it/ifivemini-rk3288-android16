@@ -564,10 +564,12 @@
 			};
 
 			/* LDO4 - 1.00..3.30 V */
-			REG8 {
-				regulator-name = "act_ldo4";
+			/* LDO4 - 1.00..3.30 V, SD card power (stock act_ldo4) */
+			vcc_sd: REG8 {
+				regulator-name = "vcc_sd";
 				regulator-min-microvolt = <1000000>;
 				regulator-max-microvolt = <3300000>;
+				regulator-boot-on;
 			};
 
 			/* LDO5 - 3.30 V, VCCIO_PMU */
