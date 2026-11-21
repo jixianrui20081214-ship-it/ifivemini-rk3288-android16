@@ -1,0 +1,87 @@
+name: Build RK3288 kernel + resource
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'kernel/**'
+      - 'release-build/**'
+      - '.github/workflows/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout (with LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 1
+
+      - name: Restore symlinks (zip-download safety net)
+        run: |
+          if [ -f scripts/restore-symlinks.py ]; then
+            python3 scripts/restore-symlinks.py || true
+          fi
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex lz4 libssl-dev python3 zip unzip \
+            device-tree-compiler e2fsprogs xz-utils curl file \
+            gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
+          echo "--- toolchain ---"
+          arm-linux-gnueabi-gcc --version | head -1
+
+      - name: Build kernel (zImage + DTS)
+        env:
+          ARCH: arm
+          CROSS_COMPILE: arm-linux-gnueabi-
+          KCFLAGS: -Wno-array-compare
+        run: |
+          set -euo pipefail
+          CFG=gsi-release
+          O="$PWD/out/kernel-$CFG"
+          mkdir -p "$O"
+          cp "kernel-configs/$CFG.config" "$O/.config"
+          make -C kernel O="$O" olddefconfig
+          # 需要编译的 DTB 列表：iFive 必编；S2 若存在则一起编
+          DTBS="rk3288-ifive-mini4s.dtb"
+          if [ -f kernel/arch/arm/boot/dts/rk3288-bbk-s2.dts ]; then
+            DTBS="$DTBS rk3288-bbk-s2.dtb"
+            echo "::notice::检测到 rk3288-bbk-s2.dts，一起编译"
+          fi
+          make -C kernel O="$O" -j"$(nproc)" CC="${CROSS_COMPILE}gcc" zImage $DTBS
+          echo "--- 产物 ---"
+          ls -lh "$O/arch/arm/boot/zImage"
+          ls -lh "$O/arch/arm/boot/dts/"*.dtb
+
+      - name: Pack kernel.img (Rockchip KRNL)
+        run: |
+          set -euo pipefail
+          O="$PWD/out/kernel-gsi-release"
+          python3 release-build/tools/mkkrnl.py pack \
+            "$O/arch/arm/boot/zImage" "$O/kernel.img"
+          python3 release-build/tools/mkkrnl.py verify "$O/kernel.img"
+          ls -lh "$O/kernel.img"
+
+      - name: Build resource.img
+        run: |
+          set -euo pipefail
+          chmod +x release-build/tools/resource_tool release-build/tools/dtc || true
+          ./release-build/build-resource.sh
+          ls -lh release-build/resource-release-gsi.img
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rk3288-build-${{ github.run_number }}
+          path: |
+            out/kernel-gsi-release/kernel.img
+            out/kernel-gsi-release/arch/arm/boot/dts/*.dtb
+            release-build/resource-release-gsi.img
+          if-no-files-found: error
+          retention-days: 30
